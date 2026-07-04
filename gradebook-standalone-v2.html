@@ -89,6 +89,8 @@
   .grip { cursor:grab; color:var(--muted); padding:0 6px 0 2px; }
   .indent { border:none; background:none; cursor:pointer; color:var(--muted); padding:0 4px; font-size:12px; }
   .indent:hover { color:var(--line); background:none; }
+  .tri { border:none; background:none; cursor:pointer; color:var(--line); padding:0 5px; font-size:15px; line-height:1; }
+  .tri:hover { background:none; color:#0a4a86; }
   table.scheme tr.child td:first-child { padding-left:36px; }
   table.scheme tr.child td { background:#fafafa; }
   table.scheme tr.dragover { outline:2px dashed var(--line); outline-offset:-2px; }
@@ -147,7 +149,7 @@ const KEY='gradebook-standalone.v1';
 const TTL=2*60*60*1000;                   // grade data self-destructs after 2 hours
 let D=load()||{subject:'',number:'',section:'',term:'',cols:[],students:[],rawFormula:'',gradeFormula:''};
 if(D.code&&!D.subject){ const m=/^(.*\S)\s+(\S+)$/.exec(D.code); D.subject=m?m[1]:D.code; D.number=m?m[2]:''; delete D.code; }
-let SERIES=null, FILTER='', BUCKET='LETTER', SORT=null, STUCOL=false;
+let SERIES=null, FILTER='', BUCKET='LETTER', SORT=null, STUCOL=false; const COLL=new Set();
 function load(){
   try{
     const x=JSON.parse(localStorage.getItem(KEY));
@@ -309,7 +311,7 @@ function render(){
   const DISP=[];
   for(const c of D.cols) if(!c.parent){
     const kids=D.cols.filter(x=>x.parent===c.id);
-    for(const k of kids) DISP.push({c:k,computed:false});
+    if(!COLL.has(c.id)) for(const k of kids) DISP.push({c:k,computed:false});
     DISP.push({c,computed:kids.length>0});
   }
   const csep=i=>i===0?' class="gsep"':'';
@@ -319,12 +321,13 @@ function render(){
   const wsum=D.cols.reduce((a,c)=>a+(c.parent?0:(+c.weight||0)),0);
   const sumOk=Math.round(wsum)===100||(!wsum&&(D.rawFormula||D.cols.some(c=>(c.code||'').trim()==='***')));
   const ordered=[];      // display order: each top-level row, then its children
-  for(const c of D.cols) if(!c.parent){ ordered.push(c); for(const k of D.cols) if(k.parent===c.id) ordered.push(k); }
+  for(const c of D.cols) if(!c.parent){ ordered.push(c); if(!COLL.has(c.id)) for(const k of D.cols) if(k.parent===c.id) ordered.push(k); }
   const rowOf=c=>{
     const child=!!c.parent, parent=kidsOf(c.id).length>0;
     const ind=child
       ?`<button class="indent" data-out="${c.id}" title="promote to top level">←</button>`
-      :(parent?'':`<button class="indent" data-ind="${c.id}" title="indent under the component above (its formula then folds this)">→</button>`);
+      :(parent?`<button class="tri" data-tog="${c.id}" title="show/hide the components under ${esc(c.title)}">${COLL.has(c.id)?'▸':'▾'}</button>`
+              :`<button class="indent" data-ind="${c.id}" title="indent under the component above (its formula then folds this)">→</button>`);
     return `<tr${child?' class="child"':''} data-cid="${c.id}">
       <td><span style="display:flex;align-items:center"><span class="grip" draggable="true" data-drag="${c.id}" title="drag to reorder">≡</span>${ind}<input data-ctitle="${c.id}" value="${esc(c.title)}"></span></td>
       <td><input data-ccode="${c.id}" value="${esc(c.code||'')}" placeholder="—"></td>
@@ -602,6 +605,8 @@ document.addEventListener('click',e=>{
     D.cols.forEach(x=>{ if(x.parent===id) x.parent=null; });   // children step up
     D.cols=D.cols.filter(c=>c.id!==id);
     D.students.forEach(st=>delete st.marks[id]); save(); SERIES=null; render(); return; }
+  const tog=e.target.closest('[data-tog]');
+  if(tog){ const id=tog.dataset.tog; COLL.has(id)?COLL.delete(id):COLL.add(id); render(); return; }
   const ind=e.target.closest('[data-ind]');
   if(ind){ const c=D.cols.find(x=>x.id===ind.dataset.ind);
     // indent under the nearest top-level component ABOVE it
