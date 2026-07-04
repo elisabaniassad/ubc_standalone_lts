@@ -91,7 +91,7 @@
   .indent:hover { color:var(--line); background:none; }
   .tri { border:none; background:none; cursor:pointer; color:var(--line); padding:0 5px; font-size:15px; line-height:1; }
   .tri:hover { background:none; color:#0a4a86; }
-  table.scheme tr.child td:first-child { padding-left:36px; }
+
   table.scheme tr.child td { background:#fafafa; }
   table.scheme tr.dragover { outline:2px dashed var(--line); outline-offset:-2px; }
   #gbtable td.computed { color:var(--muted); }
@@ -175,7 +175,10 @@ function sanitize(d){
     weight:(c.weight==null||c.weight==='')?null:+c.weight, parent:c.parent||null}));
   const ids=new Set(d.cols.map(c=>c.id));
   d.cols.forEach(c=>{ if(c.parent&&(!ids.has(c.parent)||c.parent===c.id)) c.parent=null; });
-  d.cols.forEach(c=>{ if(c.parent&&d.cols.find(x=>x.id===c.parent).parent) c.parent=null; });  // one level only
+  d.cols.forEach(c=>{                                    // any depth; break CYCLES only
+    const seen=new Set([c.id]); let x=c;
+    while(x&&x.parent){ if(seen.has(x.parent)){ c.parent=null; break; }
+      seen.add(x.parent); x=d.cols.find(y=>y.id===x.parent); } });
   d.students=(Array.isArray(d.students)?d.students:[]).filter(st=>st&&typeof st==='object').map(st=>({
     snum:st.snum||'', first:st.first||'', last:st.last||'', section:st.section||'',
     marks:Object.fromEntries(Object.entries(st.marks||{}).filter(([k,v])=>ids.has(k)&&v!=null&&v!==''))}));
@@ -253,6 +256,16 @@ function evalExpr(value,src,lookup){
 }
 function isExpr(f){ return /this|if\s*\(|clamp\s*\(/i.test(f||''); }
 const kidsOf=id=>D.cols.filter(x=>x.parent===id);
+const subtreeOf=id=>{ const out=[]; (function w(pid){ for(const c of D.cols) if(c.parent===pid){ out.push(c); w(c.id); } })(id); return out; };
+const inSubtree=(aid,c)=>{ let x=c,hop=0; while(x&&x.parent&&hop++<50){ if(x.parent===aid) return true; x=D.cols.find(y=>y.id===x.parent); } return false; };
+// move a component (WITH its subtree) so the flat D.cols order stays a
+// clean pre-order: remove the block, then splice it at `idx`
+function moveBlock(c,newParent,idx){
+  const block=[c,...subtreeOf(c.id)];
+  D.cols=D.cols.filter(x=>!block.includes(x));
+  c.parent=newParent;
+  D.cols.splice(idx==null?D.cols.length:idx,0,...block);
+}
 /* fold a parent's children: DROP(LOWEST[,n]) / DROP(HIGHEST[,n]) (never drops
    them all), SUM (capped 100), MAX, MIN; default = weight-weighted mean */
 function aggregate(xs,f){
@@ -351,27 +364,36 @@ function render(){
   // display columns: each top-level's CHILDREN (editable), then the parent
   // (computed fold); childless top-levels are plain mark columns
   const DISP=[];
-  for(const c of D.cols) if(!c.parent){
-    const kids=D.cols.filter(x=>x.parent===c.id);
-    if(!COLL.has(c.id)) for(const k of kids) DISP.push({c:k,computed:false});
-    DISP.push({c,computed:kids.length>0});
-  }
+  // post-order at any depth: a node's subtree columns first, then its fold
+  D.cols.filter(c=>!c.parent).forEach(function walk(n){
+    const nk=D.cols.filter(x=>x.parent===n.id);
+    if(!nk.length){ DISP.push({c:n,computed:false}); return; }
+    if(!COLL.has(n.id)) nk.forEach(walk);
+    DISP.push({c:n,computed:true});
+  });
   const csep=i=>i===0?' class="gsep"':'';
   const sub=(name,cell,course)=>`<tr class="sub">${lbl(name)}${DISP.map((d,i)=>`<td${csep(i)}>${cell(d.c,i)}</td>`).join('')}${course}</tr>`;
   // ── the calculation table (the Lifeboat layout): components, codes,
   //    formulas, weights — edited HERE; the grid below is marks ──
   const wsum=D.cols.reduce((a,c)=>a+(c.parent?0:(+c.weight||0)),0);
   const sumOk=Math.round(wsum)===100||(!wsum&&(D.rawFormula||D.cols.some(c=>(c.code||'').trim()==='***')));
-  const ordered=[];      // display order: each top-level row, then its children
-  for(const c of D.cols) if(!c.parent){ ordered.push(c); if(!COLL.has(c.id)) for(const k of D.cols) if(k.parent===c.id) ordered.push(k); }
-  const rowOf=c=>{
+  const ordered=[];      // pre-order walk, any depth; collapsed subtrees hide
+  (function walk(pid,depth,hidden){
+    for(const c of D.cols) if((c.parent||null)===pid){
+      if(!hidden) ordered.push({c,depth});
+      walk(c.id,depth+1,hidden||COLL.has(c.id));
+    }
+  })(null,0,false);
+  const rowOf=({c,depth})=>{
     const child=!!c.parent, parent=kidsOf(c.id).length>0;
-    const ind=child
-      ?`<button class="indent" data-out="${c.id}" title="promote to top level">←</button>`
-      :(parent?`<button class="tri" data-tog="${c.id}" title="show/hide the components under ${esc(c.title)}">${COLL.has(c.id)?'▸':'▾'}</button>`
-              :`<button class="indent" data-ind="${c.id}" title="indent under the component above (its formula then folds this)">→</button>`);
+    // preceding SIBLING (same parent) = what → would nest this under
+    const sibs=D.cols.filter(x=>(x.parent||null)===(c.parent||null));
+    const prevSib=sibs[sibs.indexOf(c)-1];
+    const ind=(parent?`<button class="tri" data-tog="${c.id}" title="show/hide the components under ${esc(c.title)}">${COLL.has(c.id)?'▸':'▾'}</button>`:'')
+      +(prevSib?`<button class="indent" data-ind="${c.id}" title="indent under ${esc(prevSib.title)} (its formula then folds this)">→</button>`:'')
+      +(child?`<button class="indent" data-out="${c.id}" title="promote one level up">←</button>`:'');
     return `<tr${child?' class="child"':''} data-cid="${c.id}">
-      <td><span style="display:flex;align-items:center"><span class="grip" draggable="true" data-drag="${c.id}" title="drag to reorder">≡</span>${ind}<input data-ctitle="${c.id}" value="${esc(c.title)}"></span></td>
+      <td style="padding-left:${6+depth*22}px"><span style="display:flex;align-items:center"><span class="grip" draggable="true" data-drag="${c.id}" title="drag to reorder">≡</span>${ind}<input data-ctitle="${c.id}" value="${esc(c.title)}"></span></td>
       <td><input data-ccode="${c.id}" value="${esc(c.code||'')}" placeholder="—"></td>
       <td><input data-cform="${c.id}" value="${esc(c.formula||'')}" placeholder="—" title="${parent?'folds the indented children: DROP(LOWEST[,n]) · DROP(HIGHEST[,n]) · SUM · MAX · MIN · then SCALE(n)/expressions':'SCALE(10) · if(this>89,100) · clamp(this,0,100) · other columns\' codes'}"></td>
       <td class="pctcol"><input class="wpct" data-cw="${c.id}" value="${c.weight??''}" inputmode="decimal" placeholder="${child?'eq':''}" title="${child?'share WITHIN '+esc((D.cols.find(x=>x.id===c.parent)||{}).title||'the parent')+' — blank = equal weighting (the default); the parent\'s formula can change how they combine':'% of course grade'}">%</td>
@@ -640,12 +662,8 @@ document.addEventListener('drop',e=>{
   e.preventDefault(); tr.classList.remove('dragover');
   const drag=D.cols.find(x=>x.id===DRAG), tgt=D.cols.find(x=>x.id===tr.dataset.cid);
   DRAG=null;
-  if(!drag||!tgt||drag===tgt||tgt.parent===drag.id) return;
-  const block=kidsOf(drag.id).length?[drag,...kidsOf(drag.id)]:[drag];
-  D.cols=D.cols.filter(x=>!block.includes(x));
-  if(block.length===1) drag.parent=tgt.parent||null;      // singles adopt the target's level
-  const anchor=(block.length>1&&tgt.parent)?D.cols.find(x=>x.id===tgt.parent):tgt;
-  D.cols.splice(D.cols.indexOf(anchor),0,...block);
+  if(!drag||!tgt||drag===tgt||inSubtree(drag.id,tgt)) return;   // never into your own subtree
+  moveBlock(drag,tgt.parent||null,D.cols.indexOf(tgt));         // before the target, at its level
   save(); SERIES=null; render();
 });
 document.getElementById('jsonfile').addEventListener('change',e=>{
@@ -689,21 +707,19 @@ document.addEventListener('click',e=>{
   if(tog){ const id=tog.dataset.tog; COLL.has(id)?COLL.delete(id):COLL.add(id); render(); return; }
   const ind=e.target.closest('[data-ind]');
   if(ind){ const c=D.cols.find(x=>x.id===ind.dataset.ind);
-    // indent under the nearest top-level component ABOVE it
-    const tops=D.cols.filter(x=>!x.parent);
-    const at=tops.indexOf(c);
-    if(at>0){ const parent=tops[at-1]; c.parent=parent.id;
-      D.cols=D.cols.filter(x=>x!==c);
-      const block=[parent,...D.cols.filter(x=>x.parent===parent.id&&x!==c)];
-      D.cols.splice(D.cols.indexOf(block[block.length-1])+1,0,c);
+    const sibs=D.cols.filter(x=>(x.parent||null)===(c.parent||null));
+    const prevSib=sibs[sibs.indexOf(c)-1];
+    if(prevSib){   // nest under the preceding sibling, at the end of its subtree
+      const tail=[prevSib,...subtreeOf(prevSib.id)].filter(x=>x!==c&&!inSubtree(c.id,x));
+      moveBlock(c,prevSib.id,D.cols.indexOf(tail[tail.length-1])+1);
       save(); SERIES=null; render(); }
     return; }
   const out=e.target.closest('[data-out]');
   if(out){ const c=D.cols.find(x=>x.id===out.dataset.out);
-    const pid=c.parent; c.parent=null;
-    D.cols=D.cols.filter(x=>x!==c);
-    const last=[...D.cols].reverse().find(x=>x.id===pid||x.parent===pid);
-    D.cols.splice(D.cols.indexOf(last)+1,0,c);
+    const parent=D.cols.find(x=>x.id===c.parent); if(!parent) return;
+    // step up one level, landing right after the parent's subtree
+    const tail=[parent,...subtreeOf(parent.id)].filter(x=>x!==c&&!inSubtree(c.id,x));
+    moveBlock(c,parent.parent||null,D.cols.indexOf(tail[tail.length-1])+1);
     save(); SERIES=null; render(); return; }
   const ds=e.target.closest('[data-delstu]');
   if(ds){ if(!confirm('Remove this student?')) return; D.students.splice(+ds.dataset.delstu,1); save(); render(); return; }
