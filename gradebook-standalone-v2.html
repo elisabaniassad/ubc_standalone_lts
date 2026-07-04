@@ -392,8 +392,8 @@ function render(){
     // preceding SIBLING (same parent) = what → would nest this under
     const sibs=D.cols.filter(x=>(x.parent||null)===(c.parent||null));
     const prevSib=sibs[sibs.indexOf(c)-1];
-    const ind=(prevSib?`<button class="indent" data-ind="${c.id}" title="make this a sub-component of ${esc(prevSib.title)} — nothing moves, only the depth changes">→</button>`:'')
-      +(child?`<button class="indent" data-out="${c.id}" title="promote one level up — later siblings become its sub-components, so nothing moves">←</button>`:'');
+    const ind=(child?`<button class="indent" data-out="${c.id}" title="promote one level up — later siblings become its sub-components, so nothing moves">←</button>`:'')
+      +(prevSib?`<button class="indent" data-ind="${c.id}" title="make this a sub-component of ${esc(prevSib.title)} — nothing moves, only the depth changes">→</button>`:'');
     const tri=parent?`<button class="tri" data-tog="${c.id}" title="show/hide the components under ${esc(c.title)}">${COLL.has(c.id)?'▸':'▾'}</button>`:'';
     return `<tr${child?' class="child"':''} data-cid="${c.id}">
       <td class="ctl">${ind}</td>
