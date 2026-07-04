@@ -110,6 +110,7 @@
   <input type="file" id="csvfile" accept=".csv" style="display:none">
   <button id="importbtn" title="CSV: Student #, First, Last, Section (optional), then one column per assessment">Import CSV</button>
   <input type="file" id="jsonfile" accept=".json" style="display:none">
+  <input type="file" id="schfile" accept=".json" style="display:none">
   <button id="dl" title="save everything (students, marks, formulas) as a file — works even when browser storage is full">Download data</button>
   <button id="loadbtn" title="load a previously downloaded data file">Load data</button>
   <button id="wipe" title="erase everything stored in this browser">start over</button>
@@ -377,7 +378,7 @@ function render(){
       <td class="xcol"><button class="x" data-delcol="${c.id}" title="remove ${esc(c.title)}${parent?' (its children become top-level)':' and its marks'}">×</button></td></tr>`; };
   document.getElementById('calc').innerHTML=`<p class="bar" style="margin:4px 0">
       <button id="schdl" title="save the SCHEME (structure, codes, formulas, weights — no students, no marks) as a file">Download scheme</button>
-      <input type="file" id="schfile" accept=".json" style="display:none"><button id="schload" title="load a scheme file: components match your existing columns by title/code; marks are kept">Load scheme</button>
+      <button id="schload" title="load a scheme file: components match your existing columns by title/code; marks are kept">Load scheme</button>
     </p><table class="scheme">
     <tr><th>Component <button id="addcol" class="plus" title="add a component">+</button></th><th class="codecol">Code</th><th class="formcol">Formula</th><th class="pctcol">%</th><th class="xcol"></th></tr>
     ${ordered.map(rowOf).join('')}
