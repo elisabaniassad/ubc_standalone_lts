@@ -81,9 +81,9 @@
   table.scheme th.codecol { width:90px; }
   table.scheme th.formcol { width:30%; }
   table.scheme td.xcol, table.scheme th.xcol { border:none; width:30px; text-align:center; }
-  /* the structure rail: grips and arrows live in their OWN fixed column —
-     only the component TEXT indents, which is what the eye reads */
-  table.scheme td.ctl, table.scheme th.ctl { border:none; width:92px; white-space:nowrap; text-align:left; background:transparent !important; }
+  /* the indent/outdent column: a narrow, bordered, first-class table column
+     snug against the component names — only the TEXT indents */
+  table.scheme td.ctl, table.scheme th.ctl { width:52px; white-space:nowrap; text-align:center; padding:2px 3px; }
   table.scheme input { font:inherit; border:none; background:transparent; padding:2px 4px; width:100%; box-sizing:border-box; }
   table.scheme input:focus { outline:none; background:#fff; box-shadow:inset 0 0 0 1px var(--line); }
   table.scheme input.wpct { width:48px; text-align:right; }
@@ -396,7 +396,7 @@ function render(){
       +(child?`<button class="indent" data-out="${c.id}" title="promote one level up — later siblings become its sub-components, so nothing moves">←</button>`:'');
     const tri=parent?`<button class="tri" data-tog="${c.id}" title="show/hide the components under ${esc(c.title)}">${COLL.has(c.id)?'▸':'▾'}</button>`:'';
     return `<tr${child?' class="child"':''} data-cid="${c.id}">
-      <td class="ctl"><span class="grip" draggable="true" data-drag="${c.id}" title="drag to reorder">≡</span>${ind}</td>
+      <td class="ctl">${ind}</td>
       <td style="padding-left:${8+depth*24}px"><span style="display:flex;align-items:center"><input data-ctitle="${c.id}" value="${esc(c.title)}" style="flex:1;width:auto">${tri}</span></td>
       <td><input data-ccode="${c.id}" value="${esc(c.code||'')}" placeholder="—"></td>
       <td><input data-cform="${c.id}" value="${esc(c.formula||'')}" placeholder="—" title="${parent?'folds the indented children: DROP(LOWEST[,n]) · DROP(HIGHEST[,n]) · SUM · MAX · MIN · then SCALE(n)/expressions':'SCALE(10) · if(this>89,100) · clamp(this,0,100) · other columns\' codes'}"></td>
