@@ -120,6 +120,8 @@
 Formulas: <code>SCALE(10)</code>, <code>if(this&gt;89,100)</code>, <code>clamp(this,0,100)</code>, arithmetic on <code>this</code> or other columns' short codes.<br>
 Type <code>***</code> as a column's short code or formula to make it THE course <b>Raw</b> column: it auto-names the column (e.g. Tentative Grade → <code>TG</code>) and writes that name into the Raw formula for you.<br>
 Grade formula (optional — nothing is applied unless you type it): <code>ROUND()+BOOST</code> (boost lifts a grade sitting within N of a UBC boundary), <code>ROUNDUP</code>/<code>ROUNDDOWN</code>, <code>SCALE(n)</code>, <code>+BOOST(2)</code>. The Grade column always reports whole numbers.<br>
+Parent folds: <code>DROP(LOWEST[,n])</code>/<code>DROP(HIGHEST[,n])</code> · <code>KEEP(HW5)</code> protects members from the drop · <code>SUM</code>/<code>MAX</code>/<code>MIN</code>.
+Grade formula extras: <code>BUMP(89-&gt;90,79-&gt;80)</code> boosts those exact values only; <code>n0(TB)</code> reads a code as 0 when blank (bonus columns).<br>
 A <b>Final Exam</b> column scoring exactly 0 flags <b>DNW</b>.</p>
 
 <h2>Overall grade calculation</h2>
@@ -193,11 +195,12 @@ function evalExpr(value,src,lookup){
   function primary(){ ws();
     if(s[i]==='('){ i++; const v=cmp(); ws(); if(s[i]===')') i++; return v; }
     if(s[i]==='-'){ i++; return -primary(); }
-    const fn=/^(if|clamp|min|max|round|roundup|rounddown)\s*\(/i.exec(s.slice(i));
+    const fn=/^(if|clamp|min|max|round|roundup|rounddown|n0)\s*\(/i.exec(s.slice(i));
     if(fn){ i+=fn[0].length; const args=[cmp()]; ws();
       while(s[i]===','){ i++; args.push(cmp()); ws(); }
       if(s[i]===')') i++;
       const f=fn[1].toLowerCase();
+      if(f==='n0') return isFinite(args[0])?args[0]:0;     // blank-safe: n0(TB) = 0 when TB is empty
       if(f==='if') return (args[0]&&args[0]!==0&&args[0]!==false)?(args[1]??value):(args[2]??value);
       if(f==='clamp') return Math.min(args[2]??100,Math.max(args[1]??0,args[0]));
       if(f==='min') return Math.min(...args);
@@ -233,17 +236,26 @@ const kidsOf=id=>D.cols.filter(x=>x.parent===id);
    them all), SUM (capped 100), MAX, MIN; default = weight-weighted mean */
 function aggregate(xs,f){
   let list=[...xs];
+  // KEEP(HW5,…) protects members (by short code) from being dropped
+  const kp=/keep\s*\(([^)]*)\)/i.exec(f||'');
+  const prot=new Set((kp?kp[1].split(','):[]).map(x=>x.trim().toLowerCase()).filter(Boolean));
   const m=/drop\s*\(\s*(lowest|highest)\s*(?:,\s*(\d+))?\s*\)/i.exec(f||'');
-  if(m){ const n=Math.min(+(m[2]||1), list.length-1);
-    if(n>0){ list.sort((a,b)=>a.g-b.g); list=/lowest/i.test(m[1])?list.slice(n):list.slice(0,list.length-n); } }
+  if(m){
+    const kept=list.filter(x=>prot.has((x.code||'').toLowerCase()));
+    let pool=list.filter(x=>!prot.has((x.code||'').toLowerCase()));
+    const n=Math.min(+(m[2]||1), pool.length-1);
+    if(n>0){ pool.sort((a,b)=>a.g-b.g); pool=/lowest/i.test(m[1])?pool.slice(n):pool.slice(0,pool.length-n); }
+    list=[...pool,...kept];
+  }
   if(/\bsum\b/i.test(f||'')) return Math.min(100,list.reduce((a,x)=>a+x.g,0));
   if(/\bmax\b/i.test(f||'')) return Math.max(...list.map(x=>x.g));
   if(/\bmin\b/i.test(f||'')) return Math.min(...list.map(x=>x.g));
-  const W=list.reduce((a,x)=>a+(+x.w||1),0)||1;
-  return list.reduce((a,x)=>a+x.g*(+x.w||1),0)/W;
+  const W=list.reduce((a,x)=>a+(+x.w||0),0);
+  if(!W) return list.reduce((a,x)=>a+x.g,0)/(list.length||1);   // all-zero shares: plain mean
+  return list.reduce((a,x)=>a+x.g*(+x.w),0)/W;
 }
 function codeRefs(f){ const ids=(f||'').match(/[A-Za-z_][A-Za-z0-9_]*/g)||[];
-  const K=new Set(['this','if','clamp','min','max','round','roundup','rounddown','scale','boost']);
+  const K=new Set(['this','if','clamp','min','max','round','roundup','rounddown','scale','boost','bump','keep','lowest','highest','sum','drop','avg','n0']);
   return ids.some(w=>!K.has(w.toLowerCase())&&D.cols.some(c=>(c.code||'').toLowerCase()===w.toLowerCase())); }
 function codeLookup(st,seen){ return name=>{
   const cc=D.cols.find(x=>(x.code||'').toLowerCase()===name.toLowerCase());
@@ -252,7 +264,9 @@ function codeLookup(st,seen){ return name=>{
 function colGrade(st,c,seen){
   const kids=kidsOf(c.id);
   if(kids.length){                        // a PARENT: fold the indented children
-    const xs=kids.map(k=>({g:colGrade(st,k,new Set([...(seen||[]),c.id])),w:+k.weight||1}))
+    const xs=kids.map(k=>({g:colGrade(st,k,new Set([...(seen||[]),c.id])),
+                           w:(k.weight==null||k.weight==='')?1:+k.weight,   // blank = EQUAL weighting
+                           code:k.code||''}))
                  .filter(x=>x.g!=null);
     if(!xs.length) return null;
     let v=aggregate(xs,c.formula);
@@ -292,7 +306,14 @@ function totals(st){
   g=applyScale(g,gf);
   if(isExpr(gf)||codeRefs(gf)) g=evalExpr(g,gf,codeLookup(st));
   if(/rounddown/i.test(gf)) g=Math.floor(g); else if(/roundup/i.test(gf)) g=Math.ceil(g); else g=Math.round(g);
+  let bumped=false;
+  const bm=/bump\s*\(([^)]*)\)/i.exec(gf);
+  if(bm) for(const pr of bm[1].split(',')){
+    const m2=/(-?\d+(?:\.\d+)?)\s*->\s*(-?\d+(?:\.\d+)?)/.exec(pr);
+    if(m2&&g===+m2[1]){ g=+m2[2]; bumped=true; break; }
+  }
   const b=applyBoost(g,gf);
+  if(bumped) b.boosted=true;
   return {raw,grade:b.v,boosted:b.boosted}; }
 function dnwOf(st){ const fin=D.cols.find(c=>/final\s*exam/i.test(c.title));
   return !!(fin&&+st.marks[fin.id]===0&&st.marks[fin.id]!==''&&st.marks[fin.id]!=null); }
@@ -332,15 +353,19 @@ function render(){
       <td><span style="display:flex;align-items:center"><span class="grip" draggable="true" data-drag="${c.id}" title="drag to reorder">≡</span>${ind}<input data-ctitle="${c.id}" value="${esc(c.title)}"></span></td>
       <td><input data-ccode="${c.id}" value="${esc(c.code||'')}" placeholder="—"></td>
       <td><input data-cform="${c.id}" value="${esc(c.formula||'')}" placeholder="—" title="${parent?'folds the indented children: DROP(LOWEST[,n]) · DROP(HIGHEST[,n]) · SUM · MAX · MIN · then SCALE(n)/expressions':'SCALE(10) · if(this>89,100) · clamp(this,0,100) · other columns\' codes'}"></td>
-      <td class="pctcol"><input class="wpct" data-cw="${c.id}" value="${c.weight??''}" inputmode="decimal" title="${child?'share WITHIN '+esc((D.cols.find(x=>x.id===c.parent)||{}).title||'the parent'):'% of course grade'}">%</td>
+      <td class="pctcol"><input class="wpct" data-cw="${c.id}" value="${c.weight??''}" inputmode="decimal" placeholder="${child?'eq':''}" title="${child?'share WITHIN '+esc((D.cols.find(x=>x.id===c.parent)||{}).title||'the parent')+' — blank = equal weighting (the default); the parent\'s formula can change how they combine':'% of course grade'}">%</td>
       <td class="xcol"><button class="x" data-delcol="${c.id}" title="remove ${esc(c.title)}${parent?' (its children become top-level)':' and its marks'}">×</button></td></tr>`; };
-  document.getElementById('calc').innerHTML=`<table class="scheme">
+  document.getElementById('calc').innerHTML=`<p class="bar" style="margin:4px 0">
+      <button id="schdl" title="save the SCHEME (structure, codes, formulas, weights — no students, no marks) as a file">Download scheme</button>
+      <input type="file" id="schfile" accept=".json" style="display:none"><button id="schload" title="load a scheme file: components match your existing columns by title/code; marks are kept">Load scheme</button>
+    </p><table class="scheme">
     <tr><th>Component <button id="addcol" class="plus" title="add a component">+</button></th><th class="codecol">Code</th><th class="formcol">Formula</th><th class="pctcol">%</th><th class="xcol"></th></tr>
     ${ordered.map(rowOf).join('')}
     <tr><td>Course grade</td><td></td>
       <td><input data-rawform value="${esc(D.rawFormula||'')}" placeholder="weighted sum" title="Raw formula" style="width:48%"><input data-gradeform value="${esc(D.gradeFormula||'')}" placeholder="—" title="Grade formula (optional) — e.g. ROUND()+BOOST" style="width:48%"></td>
       <td class="pctcol"></td><td class="xcol"></td></tr>
-    <tr class="totalrow"><td>TOTAL</td><td></td><td>${sumOk?'':'<span class="err">should be 100</span>'}</td><td class="pctcol${sumOk?'':' err'}">${Math.round(wsum*10)/10}%</td><td class="xcol"></td></tr></table>`;
+    <tr class="totalrow"><td>TOTAL</td><td></td><td>${sumOk?'':'<span class="err">should be 100</span>'}</td><td class="pctcol${sumOk?'':' err'}">${Math.round(wsum*10)/10}%</td><td class="xcol"></td></tr></table>
+    <p><input data-schemenotes value="${esc(D.schemeNotes||'')}" placeholder="scheme notes (pass criteria, hurdles, policies — travels with the scheme file)" style="width:100%;max-width:900px;border:1px solid var(--shade);padding:4px 8px;color:var(--muted)"></p>`;
   const selRow=sub('In chart',(c,i)=>`<span class="gbck${SERIES.has(c.id)?' on':''}" data-ck="${c.id}"><span class="dot" style="background:${color(i)}"></span></span>`,
     `<td class="gsep gbck${SERIES.has('__total__')?' on':''}" data-ck="__total__"><span class="dot" style="background:#444"></span></td><td></td><td></td><td></td>`);
   const avgRow=sub('Average',c=>`<span data-avg="${c.id}"></span>`,
@@ -435,6 +460,31 @@ function refresh(){
   document.getElementById('chart').innerHTML=(!vis.length||!data.length)
     ?'<p class="note">No grades in view yet.</p>'
     :bks.map((b,i)=>`<div class="bkt"><div class="bars">${data.map(d=>`<span class="bcol" title="${esc(d.sr.label)}: ${d.counts[i]}"><span class="bn">${d.counts[i]||''}</span><span class="bfill" style="height:${Math.round(d.counts[i]/mx*76)+1}px;background:${d.sr.color}"></span></span>`).join('')}</div><span class="bktlbl">${esc(b.lbl)}</span></div>`).join('');
+}
+
+/* SCHEME files: the structure without the people. Loading matches components
+   to existing columns by title (then code) so imported marks snap into the
+   scheme; unmatched components are created; extra columns are left alone. */
+function schemeOf(){
+  return {schemeVersion:1, cols:D.cols.map(c=>({id:c.id,title:c.title,code:c.code||'',formula:c.formula||'',weight:c.weight??null,parent:c.parent||null})),
+          rawFormula:D.rawFormula||'', gradeFormula:D.gradeFormula||'', notes:D.schemeNotes||''};
+}
+function applyScheme(sch){
+  if(!sch||!Array.isArray(sch.cols)) throw new Error('not a scheme file');
+  const norm=t=>String(t||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  const idMap={};
+  for(const sc of sch.cols){
+    let c=D.cols.find(x=>norm(x.title)===norm(sc.title))
+         ||(sc.code&&D.cols.find(x=>(x.code||'').toLowerCase()===String(sc.code).toLowerCase()));
+    if(!c){ c={id:uid(),title:sc.title,code:'',formula:'',weight:null,parent:null}; D.cols.push(c); }
+    idMap[sc.id]=c.id;
+    c.title=sc.title; c.code=sc.code||''; c.formula=sc.formula||''; c.weight=sc.weight??null;
+  }
+  for(const sc of sch.cols){ const c=D.cols.find(x=>x.id===idMap[sc.id]); c.parent=sc.parent!=null?(idMap[sc.parent]||null):null; }
+  const ordered=sch.cols.map(sc=>D.cols.find(x=>x.id===idMap[sc.id]));
+  D.cols=[...ordered, ...D.cols.filter(x=>!ordered.includes(x))];
+  D.rawFormula=sch.rawFormula||''; D.gradeFormula=sch.gradeFormula||'';
+  if(sch.notes!=null) D.schemeNotes=sch.notes;
 }
 
 /* the *** gesture CONCRETIZES: auto-name the column from its title (unique
@@ -547,6 +597,7 @@ document.addEventListener('change',e=>{
   if(d.cw!==undefined){ const c=D.cols.find(c=>c.id===d.cw); const v=parseFloat(t.value); c.weight=isFinite(v)?v:null; save(); render(); return; }
   if(d.rawform!==undefined){ D.rawFormula=t.value.trim(); save(); render(); return; }
   if(d.gradeform!==undefined){ D.gradeFormula=t.value.trim(); save(); render(); return; }
+  if(d.schemenotes!==undefined){ D.schemeNotes=t.value.trim(); save(); return; }
   if(t.id==='fsubj'){ D.subject=t.value.trim(); save(); refresh(); return; }
   if(t.id==='fnum'){ D.number=t.value.trim(); save(); refresh(); return; }
   if(t.id==='fsec'){ D.section=t.value.trim(); save(); return; }
@@ -586,6 +637,14 @@ document.getElementById('jsonfile').addEventListener('change',e=>{
     }catch(err){ alert('Load failed: '+err.message); } };
   r.readAsText(f);
   e.target.value='';
+});
+document.getElementById('schfile').addEventListener('change',e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onerror=()=>alert('Could not read that file.');
+  r.onload=()=>{ try{ applyScheme(JSON.parse(r.result)); save(); SERIES=null; render(); }
+    catch(err){ alert('Scheme load failed: '+err.message); } };
+  r.readAsText(f); e.target.value='';
 });
 document.getElementById('csvfile').addEventListener('change',e=>{
   const f=e.target.files[0]; if(!f) return;
@@ -638,6 +697,11 @@ document.addEventListener('click',e=>{
   if(e.target.id==='addcol'){ D.cols.push({id:uid(),title:'New assessment',code:'',formula:'',weight:null}); save(); SERIES=null; render(); return; }
   if(e.target.id==='addstu'){ D.students.push({snum:'',first:'',last:'',section:'',marks:{}}); save(); render(); return; }
   if(e.target.id==='importbtn'){ document.getElementById('csvfile').click(); return; }
+  if(e.target.id==='schdl'){ const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([JSON.stringify(schemeOf(),null,1)],{type:'application/json'}));
+    a.download=(((D.subject||'')+(D.number||''))||'course')+'.scheme.json';
+    a.click(); URL.revokeObjectURL(a.href); return; }
+  if(e.target.id==='schload'){ document.getElementById('schfile').click(); return; }
   if(e.target.id==='dl'){ const a=document.createElement('a');
     a.href=URL.createObjectURL(new Blob([JSON.stringify(D)],{type:'application/json'}));
     a.download=(((D.subject||'')+(D.number||''))||'gradebook')+'_gradebook.json';
