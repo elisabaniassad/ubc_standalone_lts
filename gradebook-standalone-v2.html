@@ -735,7 +735,13 @@ document.addEventListener('click',e=>{
       if(typeof va==='string'||typeof vb==='string') return String(va??'').localeCompare(String(vb??''))*(SORT.asc?1:-1);
       va=va==null?-Infinity:va; vb=vb==null?-Infinity:vb; return (va-vb)*(SORT.asc?1:-1); });
     save(); render(); return; }
-  if(e.target.id==='addcol'){ D.cols.push({id:uid(),title:'New assessment',code:'',formula:'',weight:null}); save(); SERIES=null; render(); return; }
+  if(e.target.id==='addcol'){
+    const c={id:uid(),title:'New component',code:'',formula:'',weight:null,parent:null};
+    D.cols.unshift(c);                     // born at the TOP, right where the + lives
+    save(); SERIES=null; render();
+    const inp=document.querySelector(`input[data-ctitle="${c.id}"]`);
+    if(inp){ inp.focus(); inp.select(); }  // and ready to be named
+    return; }
   if(e.target.id==='addstu'){ D.students.push({snum:'',first:'',last:'',section:'',marks:{}}); save(); render(); return; }
   if(e.target.id==='importbtn'){ document.getElementById('csvfile').click(); return; }
   if(e.target.id==='schdl'){ const a=document.createElement('a');
