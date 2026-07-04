@@ -97,6 +97,9 @@
   .tri:hover { background:none; color:#0a4a86; }
 
   table.scheme tr.child td { background:#fafafa; }
+  /* a component WITH children is a fold — it reads pale blue, like the
+     grid's computed columns */
+  table.scheme tr.parentrow td { background:#eaf3fa; }
   table.scheme tr.dragover { outline:2px dashed var(--line); outline-offset:-2px; }
   #gbtable td.computed { color:var(--muted); }
 </style>
@@ -396,7 +399,7 @@ function render(){
     const ind=(child?`<button class="indent" data-out="${c.id}" title="promote one level up — later siblings become its sub-components, so nothing moves">←</button>`:'')
       +(prevSib?`<button class="indent" data-ind="${c.id}" title="make this a sub-component of ${esc(prevSib.title)} — nothing moves, only the depth changes">→</button>`:'');
     const tri=parent?`<button class="tri" data-tog="${c.id}" title="show/hide the components under ${esc(c.title)}">${COLL.has(c.id)?'▸':'▾'}</button>`:'';
-    return `<tr${child?' class="child"':''} data-cid="${c.id}">
+    return `<tr${parent?' class="parentrow"':(child?' class="child"':'')} data-cid="${c.id}">
       <td class="gripcol"><span class="grip" draggable="true" data-drag="${c.id}" title="drag to reorder">≡</span></td>
       <td class="ctl">${ind}</td>
       <td><input data-ccode="${c.id}" value="${esc(c.code||'')}" placeholder="—" style="text-align:center"></td>
