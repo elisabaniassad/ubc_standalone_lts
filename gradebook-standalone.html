@@ -1,0 +1,529 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gradebook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,400;0,600;0,700&display=swap" rel="stylesheet">
+<style>
+  /* ── the Lifeboat gradebook, standalone: one file, no server, your machine.
+     Data lives in THIS browser's localStorage; export takes it out. ── */
+  :root { --line:#111; --muted:#777; --bg:#fff; --shade:#f2f2f2; }
+  * { margin:0; }
+  body { font-family:'Source Sans 3', -apple-system, 'Segoe UI', sans-serif; font-size:14px;
+         color:var(--line); background:var(--bg); padding:18px 22px 60px; }
+  h1 { font-size:15px; letter-spacing:.02em; border-bottom:2px solid var(--line); padding-bottom:10px; margin-bottom:14px; }
+  h1 .note { font-weight:400; }
+  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.08em; margin:22px 0 8px; padding-bottom:4px; border-bottom:1px solid var(--line); }
+  .note { color:var(--muted); }
+  .err { color:#a00; }
+  b i, i b { font-style:normal; }
+  button { font:inherit; padding:3px 10px; border:1px solid var(--line); background:#fff; cursor:pointer; }
+  button:hover { background:var(--shade); }
+  input, select { font:inherit; }
+  input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
+  input[type=number] { -moz-appearance:textfield; appearance:textfield; }
+  table { border-collapse:collapse; font-variant-numeric:tabular-nums; }
+  /* columns read STRONGER than rows: firm vertical rules, soft horizontals */
+  th, td { border-top:1px solid #ececec; border-bottom:1px solid #ececec;
+           border-left:1px solid #9a9a9a; border-right:1px solid #9a9a9a;
+           padding:4px 8px; text-align:center; font-weight:400; }
+  .setup input { border:1px solid var(--line); padding:4px 8px; }
+  .bar { display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+  .bar input[type=search] { flex:1; max-width:460px; padding:5px 8px; border:1px solid var(--line); }
+  .dark { background:var(--line); color:#fff; border:none; text-transform:uppercase; font-weight:600; letter-spacing:.06em; padding:7px 12px; }
+  .dark:hover { background:#333; }
+  /* the grid — the CML look */
+  #gbtable { border-top:3px solid var(--line); font-size:12px; width:100%; }
+  #gbtable tbody td:first-child, #gbtable tbody td:nth-child(2) { text-align:left; }
+  #gbtable th.gcat { font-weight:600; border-top:2px solid var(--line); border-bottom:2px solid var(--line); border-left:1px solid var(--line); }
+  #gbtable tr.subhead th { background:#f4f8fb; border-bottom:2px solid var(--line); }
+  tr.sub td, tr.sub th { border:none !important; border-bottom:1px solid #f2f2f2 !important; border-left:1px solid #d9d9d9 !important; font-size:11px; color:var(--muted); padding:2px 6px; background:#fff; }
+  tr.sub th { border-left:none !important; }
+  tr.sub th { text-align:right; }
+  tr.sub input { width:100%; box-sizing:border-box; min-width:34px; font-size:11px; border:1px solid var(--shade); padding:1px 4px; text-align:center; }
+  td.gsep, th.gsep { border-left:3px solid var(--line) !important; }
+  /* WIDE tables: the label rail and the first column stay put */
+  #gbtable tr.sub th { position:sticky; left:0; background:#fff !important; z-index:3; }
+  #gbtable tbody td:first-child, #gbtable tr.subhead th:first-child { position:sticky; left:0; background:#fff; z-index:2; }
+  #gbtable tr.subhead th:first-child { background:#f4f8fb; }
+  #gbtable th.gcat.togglable { cursor:pointer; }
+  .gtog { display:inline-block; min-width:1em; }
+  #gbtable input.mark { width:56px; border:none; font:inherit; background:transparent; text-align:center; }
+  th.sortable { cursor:pointer; }
+  .gbck { cursor:pointer; }
+  .dot { display:inline-block; width:12px; height:12px; border:1px solid var(--line); opacity:.25; }
+  .gbck.on .dot { opacity:1; }
+  .minih { display:flex; gap:1px; align-items:flex-end; height:22px; justify-content:center; }
+  .minih span { width:5px; background:#2e4d6b; min-height:1px; }
+  .minih span.hi { background:#e0a800; }
+  .boosted { background:#cdeccd; }
+  .atbound { background:#fdf1b8; }         /* just below a boundary: yellow — a nudge, not an alarm */
+  .fail { background:#fde7e4; }            /* below 50: pale red */
+  .fail.atbound { background:#f2b3aa; }    /* a fail AT the boundary: darker red — the painful one */
+  .dnw { color:#b3392b; font-weight:700; font-size:11px; }
+  .hiddenrow { display:none; }
+  .histcard { border:1px solid var(--line); padding:10px 12px; margin:6px 0 14px; }
+  #chart { display:flex; gap:10px; align-items:flex-end; min-height:90px; }
+  .bkt { display:flex; flex-direction:column; align-items:center; gap:2px; flex:1 1 0; min-width:0; }
+  .bars { display:flex; gap:2px; align-items:flex-end; height:92px; justify-content:center; width:100%; }
+  .bars .bcol { flex:1 1 14px; max-width:14px; min-width:2px; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; }
+  .bars .bn { font-size:8px; line-height:1; color:var(--muted); margin-bottom:1px; }
+  .bars .bfill { width:100%; min-height:1px; }
+  .bktlbl { font-size:10px; color:var(--muted); }
+  .x { border:none; background:none; color:var(--muted); font-size:15px; cursor:pointer; padding:2px 6px; }
+  .x:hover { color:#a00; background:none; }
+</style>
+</head>
+<body>
+<h1>GRADEBOOK <span class="note">— standalone. Everything stays on this machine; browser storage self-clears 2 hours after your last change (Download data to keep work longer); nothing leaves it except your exports.</span></h1>
+
+<div class="setup bar">
+  <label>Academic Period <input id="fterm" placeholder="2025-26 Winter Term 2 (UBC-V)" style="width:230px" title="a term like 2025W2 becomes the full Workday period; a full period string passes through as-is"></label>
+  <label>Course Subject Code <input id="fsubj" placeholder="CPSC" style="width:70px"></label>
+  <label>Course Number <input id="fnum" placeholder="210" style="width:60px"></label>
+  <label>Section Number <input id="fsec" placeholder="101" style="width:60px" title="used for students whose row has no section"></label>
+  <span style="flex:1"></span>
+  <button id="addcol">+ column</button>
+  <button id="addstu">+ student</button>
+  <input type="file" id="csvfile" accept=".csv" style="display:none">
+  <button id="importbtn" title="CSV: Student #, First, Last, Section (optional), then one column per assessment">Import CSV</button>
+  <input type="file" id="jsonfile" accept=".json" style="display:none">
+  <button id="dl" title="save everything (students, marks, formulas) as a file — works even when browser storage is full">Download data</button>
+  <button id="loadbtn" title="load a previously downloaded data file">Load data</button>
+  <button id="wipe" title="erase everything stored in this browser">start over</button>
+  <button class="dark" id="wd">Export for Workday</button>
+</div>
+<p id="storagenote"></p>
+<p class="note" style="line-height:1.6">Import a CSV (<code>Student #, First, Last, Section, …one column per assessment…</code>) or add columns and students by hand.<br>
+Formulas: <code>SCALE(10)</code>, <code>if(this&gt;89,100)</code>, <code>clamp(this,0,100)</code>, arithmetic on <code>this</code> or other columns' short codes.<br>
+Type <code>***</code> as a column's short code or formula to make it THE course <b>Raw</b> column: it auto-names the column (e.g. Tentative Grade → <code>TG</code>) and writes that name into the Raw formula for you.<br>
+Grade formula (optional — nothing is applied unless you type it): <code>ROUND()+BOOST</code> (boost lifts a grade sitting within N of a UBC boundary), <code>ROUNDUP</code>/<code>ROUNDDOWN</code>, <code>SCALE(n)</code>, <code>+BOOST(2)</code>. The Grade column always reports whole numbers.<br>
+A <b>Final Exam</b> column scoring exactly 0 flags <b>DNW</b>.</p>
+
+<h2>Grade distribution</h2>
+<div class="histcard">
+  <div id="histstats" style="font-weight:600; margin-bottom:6px"></div>
+  <div class="bar"><label>Buckets <select id="bucket"><option value="5">5%</option><option value="10">10%</option><option value="20">20%</option><option value="LETTER" selected>Letter (UBC)</option></select></label>
+  <span class="note">Toggle series in the table's "In chart" row.</span></div>
+  <div id="chart"></div>
+</div>
+
+<h2>Marks</h2>
+<div class="bar"><input type="search" id="filter" placeholder="Filter — name, student #, section, dnw, or a grade test on the total (>50, 40..60, ==0)"><span id="filtinfo" class="note"></span></div>
+<div style="overflow-x:auto"><div id="grid"></div></div>
+
+<script>
+'use strict';
+/* ════ the model — one flat course: students × columns ════
+   D = { code, term, cols:[{id,title,code,formula,weight}],
+         students:[{snum,first,last,section,marks:{colId:number|null}}],
+         rawFormula, gradeFormula } — persisted to localStorage. */
+const KEY='gradebook-standalone.v1';
+const TTL=2*60*60*1000;                   // grade data self-destructs after 2 hours
+let D=load()||{subject:'',number:'',section:'',term:'',cols:[],students:[],rawFormula:'',gradeFormula:''};
+if(D.code&&!D.subject){ const m=/^(.*\S)\s+(\S+)$/.exec(D.code); D.subject=m?m[1]:D.code; D.number=m?m[2]:''; delete D.code; }
+let SERIES=null, FILTER='', BUCKET='LETTER', SORT=null, STUCOL=false;
+function load(){
+  try{
+    const x=JSON.parse(localStorage.getItem(KEY));
+    if(x&&x.d&&x.ts&&(Date.now()-x.ts)<TTL) return x.d;
+  }catch(e){}
+  localStorage.removeItem(KEY);           // expired (or the old un-stamped format)
+  return null;
+}
+// while the page sits open, the STORED copy still expires (in-memory work is
+// untouched — Download data remains the real save)
+setInterval(()=>{ try{ const x=JSON.parse(localStorage.getItem(KEY));
+  if(x&&x.ts&&(Date.now()-x.ts)>=TTL) localStorage.removeItem(KEY); }catch(e){} }, 5*60*1000);
+let STORAGE_OK=true;
+function save(){
+  try{ localStorage.setItem(KEY, JSON.stringify({ts:Date.now(),d:D})); STORAGE_OK=true; }
+  catch(e){ STORAGE_OK=false; }        // quota (file:// pages SHARE one origin's storage)
+  const n=document.getElementById('storagenote');
+  if(n) n.innerHTML=STORAGE_OK?'':'<span class="err">Browser storage is full (local files share one quota), so changes are NOT auto-saved — use <b>Download data</b> to keep your work, and <b>Load data</b> to bring it back.</span>';
+}
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid=()=>'c'+(D.cols.reduce((a,c)=>Math.max(a,+c.id.slice(1)||0),0)+1);
+
+/* ════ the math — the Lifeboat/CML gradebook engine, in JS ════ */
+const BOUNDS=[50,55,60,64,68,72,76,80,85,90];
+function letterOf(v){ if(v==null) return ''; return v>=90?'A+':v>=85?'A':v>=80?'A-':v>=76?'B+':v>=72?'B':v>=68?'B-':v>=64?'C+':v>=60?'C':v>=55?'C-':v>=50?'D':'F'; }
+function atBoundaryTop(v){ return v!=null&&BOUNDS.some(b=>v>=b-1&&v<b); }
+function applyScale(v,f){ const m=/scale\s*\(\s*(-?\d+(?:\.\d+)?)\s*\)/i.exec(f||''); if(!m) return v;
+  return Math.min(100,Math.max(0,v*(1+(+m[1])/100))); }
+function applyBoost(v,f){ const m=/\+\s*boost\s*(?:\(\s*(\d+(?:\.\d+)?)\s*\))?/i.exec(f||''); if(!m) return {v,boosted:false};
+  const n=m[1]!=null?+m[1]:1;
+  for(const b of BOUNDS) if(v>=b-n&&v<b) return {v:b,boosted:true};
+  return {v,boosted:false}; }
+/* tiny safe expression evaluator: numbers, this, SHORT CODES (via lookup),
+   + - * / ( ), if(cond,then[,else]), clamp(x,a,b), min/max(a,b), comparisons
+   inside if. No eval(). */
+function evalExpr(value,src,lookup){
+  if(!src) return value;
+  src=src.replace(/^\s*=/,'');          // spreadsheet fingers: "=TG" means TG
+  let i=0; const s=src;
+  const ws=()=>{ while(i<s.length&&/\s/.test(s[i])) i++; };
+  function primary(){ ws();
+    if(s[i]==='('){ i++; const v=cmp(); ws(); if(s[i]===')') i++; return v; }
+    if(s[i]==='-'){ i++; return -primary(); }
+    const fn=/^(if|clamp|min|max|round|roundup|rounddown)\s*\(/i.exec(s.slice(i));
+    if(fn){ i+=fn[0].length; const args=[cmp()]; ws();
+      while(s[i]===','){ i++; args.push(cmp()); ws(); }
+      if(s[i]===')') i++;
+      const f=fn[1].toLowerCase();
+      if(f==='if') return (args[0]&&args[0]!==0&&args[0]!==false)?(args[1]??value):(args[2]??value);
+      if(f==='clamp') return Math.min(args[2]??100,Math.max(args[1]??0,args[0]));
+      if(f==='min') return Math.min(...args);
+      if(f==='max') return Math.max(...args);
+      if(f==='round') return Math.round(args[0]);
+      if(f==='roundup') return Math.ceil(args[0]);
+      if(f==='rounddown') return Math.floor(args[0]);
+    }
+    if(/^this/i.test(s.slice(i))){ i+=4; return value; }
+    const num=/^\d+(?:\.\d+)?/.exec(s.slice(i));
+    if(num){ i+=num[0].length; return +num[0]; }
+    const word=/^[A-Za-z_][A-Za-z0-9_]*/.exec(s.slice(i));
+    if(word&&lookup){ i+=word[0].length; const v=lookup(word[0]); return v==null?NaN:v; }
+    i++; return NaN;                                  // unknown token: skip, stay safe
+  }
+  function mul(){ let v=primary(); ws();
+    while(s[i]==='*'||s[i]==='/'){ const op=s[i++]; const r=primary(); v=op==='*'?v*r:(r===0?NaN:v/r); ws(); }
+    return v; }
+  function add(){ let v=mul(); ws();
+    while(s[i]==='+'||(s[i]==='-'&&s[i+1]!=='-')){ const op=s[i++]; const r=mul(); v=op==='+'?v+r:v-r; ws(); }
+    return v; }
+  function cmp(){ let v=add(); ws();
+    const m=/^(<=|>=|==|=|<|>)/.exec(s.slice(i));
+    if(m){ i+=m[0].length; const r=add();
+      v=m[0]==='<'?v<r:m[0]==='>'?v>r:m[0]==='<='?v<=r:m[0]==='>='?v>=r:v===r; }
+    return v; }
+  const out=cmp();
+  return (typeof out==='number'&&isFinite(out))?Math.round(out*10)/10:value;
+}
+function isExpr(f){ return /this|if\s*\(|clamp\s*\(/i.test(f||''); }
+function codeRefs(f){ const ids=(f||'').match(/[A-Za-z_][A-Za-z0-9_]*/g)||[];
+  const K=new Set(['this','if','clamp','min','max','round','roundup','rounddown','scale','boost']);
+  return ids.some(w=>!K.has(w.toLowerCase())&&D.cols.some(c=>(c.code||'').toLowerCase()===w.toLowerCase())); }
+function codeLookup(st,seen){ return name=>{
+  const cc=D.cols.find(x=>(x.code||'').toLowerCase()===name.toLowerCase());
+  if(!cc||(seen&&seen.has(cc.id))) return null;
+  return colGrade(st,cc,new Set([...(seen||[])])); }; }
+function colGrade(st,c,seen){ const raw=st.marks[c.id];
+  if(raw==null||raw==='') return null;
+  let v=applyScale(+raw,c.formula);
+  if(isExpr(c.formula)||codeRefs(c.formula))
+    v=evalExpr(v,c.formula,codeLookup(st,new Set([...(seen||[]),c.id])));
+  return Math.round(v*10)/10; }
+function totals(st){
+  // the *** short code marks THE course-raw column: its grade IS the raw
+  // value, no weights or formulas needed (the converter's one-liner)
+  const star=D.cols.find(c=>(c.code||'').trim()==='***');
+  let t=0,w=0;
+  for(const c of D.cols){ const g=colGrade(st,c), wt=+c.weight||0;
+    if(g!=null&&wt>0){ t+=g*wt; w+=wt; } }
+  const base=star?colGrade(st,star):(w?t/w:null);
+  const rf=D.rawFormula||'';
+  let raw=base;
+  if(rf&&(isExpr(rf)||codeRefs(rf))){
+    // the raw formula can BE the value (converter mode: "TG", no weights);
+    // NaN in = NaN out for students whose referenced column is blank
+    const r=evalExpr(base==null?NaN:base, rf, codeLookup(st));
+    raw=(typeof r==='number'&&isFinite(r))?r:null;
+  }
+  if(raw==null) return null;
+  raw=applyScale(raw,rf);
+  raw=Math.round(raw*10)/10;
+  let g=raw;
+  const gf=D.gradeFormula||'';
+  g=applyScale(g,gf);
+  if(isExpr(gf)||codeRefs(gf)) g=evalExpr(g,gf,codeLookup(st));
+  if(/rounddown/i.test(gf)) g=Math.floor(g); else if(/roundup/i.test(gf)) g=Math.ceil(g); else g=Math.round(g);
+  const b=applyBoost(g,gf);
+  return {raw,grade:b.v,boosted:b.boosted}; }
+function dnwOf(st){ const fin=D.cols.find(c=>/final\s*exam/i.test(c.title));
+  return !!(fin&&+st.marks[fin.id]===0&&st.marks[fin.id]!==''&&st.marks[fin.id]!=null); }
+
+/* ════ render ════ */
+function render(){
+  for(const [id,f] of [['fsubj','subject'],['fnum','number'],['fsec','section'],['fterm','term']]){
+    const fe=document.getElementById(id); if(fe) fe.value=D[f]||''; }
+  if(!SERIES) SERIES=new Set(['__total__']);   // chart starts with just the Grade series
+  const PAL=['#6fa8dc','#bda1cb','#93c47d','#e0a800','#76a5af','#c27ba0','#8e7cc3','#dd7e6b','#6aa84f','#a4c2f4','#f6b26b','#999999'];
+  const color=i=>PAL[i%PAL.length];
+  const rosterN=STUCOL?1:4;
+  const lbl=t=>`<th colspan="${rosterN}">${t}</th>`;
+  const csep=i=>i===0?' class="gsep"':'';
+  const sub=(name,cell,course)=>`<tr class="sub">${lbl(name)}${D.cols.map((c,i)=>`<td${csep(i)}>${cell(c,i)}</td>`).join('')}${course}</tr>`;
+  const selRow=sub('In chart',(c,i)=>`<span class="gbck${SERIES.has(c.id)?' on':''}" data-ck="${c.id}"><span class="dot" style="background:${color(i)}"></span></span>`,
+    `<td class="gsep gbck${SERIES.has('__total__')?' on':''}" data-ck="__total__"><span class="dot" style="background:#444"></span></td><td></td><td></td><td></td>`);
+  const codeRow=sub('Short code',c=>`<input data-ccode="${c.id}" value="${esc(c.code||'')}" placeholder="—">`,
+    `<td class="gsep"></td><td></td><td></td><td></td>`);
+  const formRow=sub('Formula',c=>`<input data-cform="${c.id}" value="${esc(c.formula||'')}" placeholder="—" title="SCALE(10) · if(this>89,100) · clamp(this,0,100)">`,
+    `<td class="gsep"><input data-rawform value="${esc(D.rawFormula||'')}" placeholder="weighted sum" title="Raw formula"></td><td><input data-gradeform value="${esc(D.gradeFormula||'')}" placeholder="—" title="Grade formula (optional) — e.g. ROUND()+BOOST"></td><td></td><td></td>`);
+  const wsum=D.cols.reduce((a,c)=>a+(+c.weight||0),0);
+  const pctRow=sub('% course grade',c=>`<input data-cw="${c.id}" value="${c.weight??''}" inputmode="decimal">`,
+    `<td class="gsep">${(Math.round(wsum)===100||(!wsum&&(D.rawFormula||D.cols.some(c=>(c.code||'').trim()==='***'))))?'':`<span class="err">Σ ${Math.round(wsum*10)/10}%</span>`}</td><td></td><td></td><td></td>`);
+  const avgRow=sub('Average',c=>`<span data-avg="${c.id}"></span>`,
+    `<td class="gsep"><span data-avg="__raw__"></span></td><td><span data-avg="__total__"></span></td><td></td><td></td>`);
+  const histRow=sub('Histogram',c=>`<span data-hist="${c.id}"></span>`,
+    `<td class="gsep"></td><td><span data-hist="__total__"></span></td><td></td><td></td>`);
+  let sup=`<tr><th class="gcat togglable" data-stutog colspan="${rosterN}"><span class="gtog">${STUCOL?'+':'−'}</span> Students</th><th class="gcat" colspan="${Math.max(1,D.cols.length)}">Assessments</th><th class="gcat gsep" colspan="4">${esc(D.code||'Course')} Grade</th></tr>`;
+  let subh=`<tr class="subhead">`+(STUCOL
+    ?`<th class="sortable" data-sort="__name__">Name</th>`
+    :`<th class="sortable" data-sort="__name__">Name</th><th class="sortable" data-sort="__snum__">Student #</th><th>Section</th><th></th>`)
+    +D.cols.map((c,i)=>`<th class="sortable${i===0?' gsep':''}" data-sort="${c.id}"><input data-ctitle="${c.id}" value="${esc(c.title)}" style="border:none;background:transparent;font:inherit;text-align:center;width:110px"> <button class="x" data-delcol="${c.id}" title="remove column">×</button></th>`).join('')
+    +`<th class="gsep sortable" data-sort="__raw__">Raw</th><th class="sortable" data-sort="__total__">Grade</th><th>Letter</th><th>Note</th></tr>`;
+  const body=D.students.map((st,si)=>{
+    const tt=totals(st), dnw=dnwOf(st);
+    const cls=(()=>{ if(!tt) return '';
+      const fail=tt.grade<50, ab=atBoundaryTop(tt.grade);
+      if(fail&&ab) return ' class="fail atbound"';
+      if(fail) return ' class="fail"';
+      if(tt.boosted) return ' class="boosted"';
+      return ab?' class="atbound"':''; })();
+    const roster=STUCOL
+      ?`<td>${esc(nameOf(st)||st.snum||'—')}</td>`
+      :`<td><input data-sf="first" data-si="${si}" value="${esc(st.first||'')}" style="border:none;background:transparent;font:inherit;width:90px"></td>
+      <td><input data-sf="snum" data-si="${si}" value="${esc(st.snum||'')}" style="border:none;background:transparent;font:inherit;width:80px"></td>
+      <td><input data-sf="section" data-si="${si}" value="${esc(st.section||'')}" style="border:none;background:transparent;font:inherit;width:50px"></td>
+      <td><button class="x" data-delstu="${si}" title="remove student">×</button></td>`;
+    return `<tr data-row="${si}">${roster}`
+      +D.cols.map((c,i)=>{ const g=colGrade(st,c); return `<td${i===0?' class="gsep':' class="'}${g!=null&&g<50?' fail':''}"><input class="mark" data-mark="${c.id}" data-si="${si}" value="${st.marks[c.id]??''}"></td>`; }).join('')
+      +`<td class="gsep note">${tt?tt.raw:''}</td><td${cls}>${tt?tt.grade:''}</td><td${cls}>${tt?letterOf(tt.grade):''}</td><td>${dnw?'<span class="dnw">DNW</span>':''}</td></tr>`;
+  }).join('');
+  document.getElementById('grid').innerHTML=D.cols.length||D.students.length
+    ?`<table id="gbtable"><thead>${selRow}${codeRow}${formRow}${pctRow}${avgRow}${histRow}${sup}${subh}</thead><tbody>${body}</tbody></table>`
+    :'<p class="note">Nothing here yet — Import CSV, or add a column and a student.</p>';
+  refresh();
+}
+/* first/last: the CSV keeps them separate; the grid shows "First Last" in one cell */
+function nameOf(st){ return [st.first,st.last].filter(Boolean).join(' '); }
+
+/* ════ client math re-render (filter/averages/hists/chart) ════ */
+function visible(){
+  const q=FILTER.trim();
+  if(!q) return D.students;
+  const m=q.match(/^(?:(==|>=|<=|>|<|=)\s*(-?\d+(?:\.\d+)?)|(-?\d+(?:\.\d+)?)\s*\.\.\s*(-?\d+(?:\.\d+)?))$/);
+  if(m) return D.students.filter(st=>{ const t=totals(st); if(!t) return false; const v=t.grade;
+    if(m[3]!==undefined) return v>=+m[3]&&v<=+m[4];
+    const n=+m[2]; return m[1]==='>'?v>n:m[1]==='>='?v>=n:m[1]==='<'?v<n:m[1]==='<='?v<=n:v===n; });
+  const t=q.toLowerCase();
+  if(t==='dnw') return D.students.filter(dnwOf);
+  return D.students.filter(st=>nameOf(st).toLowerCase().includes(t)||(st.snum||'').includes(t)||(st.section||'').toLowerCase()===t);
+}
+function buckets(){ if(BUCKET==='LETTER'){ return [[0,50,'F'],[50,55,'D'],[55,60,'C-'],[60,64,'C'],[64,68,'C+'],[68,72,'B-'],[72,76,'B'],[76,80,'B+'],[80,85,'A-'],[85,90,'A'],[90,101,'A+']].map(b=>({lo:b[0],hi:b[1],lbl:b[2]})); }
+  const w=+BUCKET,out=[]; for(let lo=0;lo<100;lo+=w) out.push({lo,hi:lo+w===100?101:lo+w,lbl:lo+'–'+(lo+w)}); return out; }
+function colVal(id,st){ if(id==='__total__'){ const t=totals(st); return t?t.grade:null; }
+  if(id==='__raw__'){ const t=totals(st); return t?t.raw:null; }
+  const c=D.cols.find(c=>c.id===id); return c?colGrade(st,c):null; }
+function refresh(){
+  const vis=visible(), set=new Set(vis);
+  document.querySelectorAll('#gbtable tbody tr').forEach(tr=>tr.classList.toggle('hiddenrow',!set.has(D.students[+tr.dataset.row])));
+  const info=document.getElementById('filtinfo');
+  info.textContent=FILTER.trim()?`${vis.length} of ${D.students.length}`:'';
+  const mean=xs=>{ const v=xs.filter(x=>x!=null); return v.length?Math.round(v.reduce((a,b)=>a+b,0)/v.length*10)/10:null; };
+  document.querySelectorAll('[data-avg]').forEach(el=>{ el.textContent=mean(vis.map(st=>colVal(el.dataset.avg,st)))??'—'; });
+  const bks=buckets(), single=vis.length===1?vis[0]:null;
+  document.querySelectorAll('[data-hist]').forEach(el=>{
+    const vals=vis.map(st=>colVal(el.dataset.hist,st));
+    const counts=bks.map(b=>vals.filter(v=>v!=null&&v>=b.lo&&v<b.hi).length);
+    const mx=Math.max(1,...counts);
+    const hv=single?colVal(el.dataset.hist,single):null;
+    el.innerHTML=`<span class="minih">${counts.map((n,i)=>`<span style="height:${Math.round(n/mx*20)+1}px"${hv!=null&&hv>=bks[i].lo&&hv<bks[i].hi?' class="hi"':''}></span>`).join('')}</span>`; });
+  // the headline stats — over the students IN VIEW (the filter narrows them)
+  const grades=vis.map(st=>{ const t=totals(st); return t?t.grade:null; }).filter(v=>v!=null);
+  const stats=document.getElementById('histstats');
+  if(stats){
+    if(!grades.length) stats.textContent='';
+    else{
+      const n=grades.length;
+      const mu=grades.reduce((a,b)=>a+b,0)/n;
+      const sd=Math.sqrt(grades.reduce((a,b)=>a+(b-mu)*(b-mu),0)/n);
+      const as=grades.filter(v=>v>=80).length, fails=grades.filter(v=>v<50).length;
+      const dnws=vis.filter(dnwOf).length;
+      const title=[D.term,[D.subject,D.number].filter(Boolean).join(' ')].filter(Boolean).join(' ');
+      stats.textContent=`${title?title+' ':''}Grades — Mean/Std = ${Math.round(mu*10)/10} / ${Math.round(sd*10)/10} % · N = ${n} · ${as} A${as===1?'':'s'} · ${fails} Fail${fails===1?'':'s'}${dnws?` · ${dnws} DNW${dnws===1?'':'s'}`:''}`;
+    }
+  }
+  const PAL=['#6fa8dc','#bda1cb','#93c47d','#e0a800','#76a5af','#c27ba0','#8e7cc3','#dd7e6b','#6aa84f','#a4c2f4','#f6b26b','#999999'];
+  const series=[...D.cols.map((c,i)=>({id:c.id,label:c.title,color:PAL[i%PAL.length]})),{id:'__total__',label:'Grade',color:'#444'}].filter(x=>SERIES.has(x.id));
+  const data=series.map(sr=>({sr,counts:bks.map(b=>vis.map(st=>colVal(sr.id,st)).filter(v=>v!=null&&v>=b.lo&&v<b.hi).length)}));
+  const mx=Math.max(1,...data.flatMap(d=>d.counts));
+  document.getElementById('chart').innerHTML=(!vis.length||!data.length)
+    ?'<p class="note">No grades in view yet.</p>'
+    :bks.map((b,i)=>`<div class="bkt"><div class="bars">${data.map(d=>`<span class="bcol" title="${esc(d.sr.label)}: ${d.counts[i]}"><span class="bn">${d.counts[i]||''}</span><span class="bfill" style="height:${Math.round(d.counts[i]/mx*76)+1}px;background:${d.sr.color}"></span></span>`).join('')}</div><span class="bktlbl">${esc(b.lbl)}</span></div>`).join('');
+}
+
+/* the *** gesture CONCRETIZES: auto-name the column from its title (unique
+   short code) and point the course Raw formula at it — nothing stays magic */
+function starGesture(c){
+  let gen=(c.title.match(/[A-Za-z0-9]+/g)||['COL']).map(w=>w[0]).join('').toUpperCase();
+  if(gen.length<2) gen=(c.title.replace(/[^A-Za-z0-9]/g,'').slice(0,3)||'COL').toUpperCase();
+  let g=gen,n=1;
+  while(D.cols.some(x=>x!==c&&(x.code||'').toUpperCase()===g)) g=gen+(++n);
+  if(!c.code) c.code=g;
+  D.rawFormula=c.code;
+}
+
+/* ════ CSV import: Student #, First, Last, Section?, then assessment columns ════ */
+function parseCSV(text){
+  const rows=[]; let row=[],cell='',q=false;
+  for(let i=0;i<text.length;i++){ const ch=text[i];
+    if(q){ if(ch==='"'){ if(text[i+1]==='"'){ cell+='"'; i++; } else q=false; } else cell+=ch; }
+    else if(ch==='"') q=true;
+    else if(ch===','){ row.push(cell); cell=''; }
+    else if(ch==='\n'||ch==='\r'){ if(ch==='\r'&&text[i+1]==='\n') i++; row.push(cell); rows.push(row); row=[]; cell=''; }
+    else cell+=ch; }
+  if(cell!==''||row.length){ row.push(cell); rows.push(row); }
+  return rows.filter(r=>r.some(c=>c.trim()!==''));
+}
+function importCSV(text){
+  const rows=parseCSV(text);
+  if(rows.length<2){ alert('Need a header row and at least one student.'); return; }
+  const head=rows[0].map(h=>h.trim());
+  const norm=h=>h.toLowerCase().replace(/[^a-z0-9]/g,'');
+  const idxOf=re=>head.findIndex(h=>re.test(norm(h)));
+  const fi=head.findIndex(h=>/first/i.test(h)), li=head.findIndex(h=>/last/i.test(h));
+  const nameI=idxOf(/^student$/);                    // Canvas: one "Last, First" column
+  // the student number: prefer explicit columns; Canvas calls it SIS User ID
+  let si=idxOf(/^(snum|studentnumber|studentno|sisuserid)$/);
+  if(si<0) si=head.findIndex(h=>/student\s*#/i.test(h));
+  if(si<0) si=idxOf(nameI>=0?/^id$/:/^(student|id)$/);   // 'Student' is only an id when it isn't the name
+  const seci=head.findIndex(h=>/^sec/i.test(h));
+  const labi=head.findIndex(h=>/^lab$/i.test(h.trim()));
+  if(si<0){ alert('No student-number column found (Student #, snum, SIS User ID, or id).'); return; }
+  const skip=new Set([fi,li,si,seci,labi,nameI].filter(x=>x>=0));
+  // identity/bookkeeping columns are not assessments (GitHub, Canvas SIS ids…)
+  head.forEach((h,i)=>{ if(/^(githubid|internalid|email|username|user|id|sisloginid|sisuserid|rootaccount|integrationid|enrollmentstate)$/.test(norm(h))) skip.add(i); });
+  const gradeCols=head.map((h,i)=>({h,i})).filter(x=>!skip.has(x.i)&&x.h);
+  for(const gc of gradeCols){
+    if(!D.cols.some(c=>norm(c.title)===norm(gc.h)))
+      D.cols.push({id:uid(),title:gc.h,code:'',formula:'',weight:null});
+  }
+  let added=0,updated=0;
+  for(const r of rows.slice(1)){
+    const snum=(r[si]||'').trim(); if(!snum) continue;
+    let st=D.students.find(s=>s.snum===snum);
+    if(!st){
+      let first=fi>=0?(r[fi]||'').trim():'', last=li>=0?(r[li]||'').trim():'';
+      if(!first&&!last&&nameI>=0){                    // Canvas "Last, First"
+        const full=(r[nameI]||'').trim();
+        const cm=full.indexOf(',');
+        if(cm>=0){ last=full.slice(0,cm).trim(); first=full.slice(cm+1).trim(); }
+        else first=full;
+      }
+      st={snum,first,last,
+        section:(seci>=0?(r[seci]||'').trim():'')||(labi>=0?(r[labi]||'').trim():''),marks:{}}; D.students.push(st); added++; }
+    else updated++;
+    for(const gc of gradeCols){
+      const col=D.cols.find(c=>norm(c.title)===norm(gc.h));
+      const v=(r[gc.i]||'').trim().replace(/%$/,'');
+      if(v!==''&&isFinite(+v)) st.marks[col.id]=+v;      // blank never clears
+    }
+  }
+  save(); SERIES=null; render();
+  alert(`${added} students added, ${updated} updated, ${gradeCols.length} assessment columns.`);
+}
+
+/* ════ Workday export (the SIS grammar) ════ */
+function workdayPeriod(label){
+  const m=/(\d{4})\s*([wsa])\s*(\d+)?/i.exec(label||''); if(!m) return label||'';
+  const y=+m[1],sess=m[2].toLowerCase(),t=m[3]||'1';
+  if(sess==='w') return `${y}-${String((y+1)%100).padStart(2,'0')} Winter Term ${t} (UBC-V)`;
+  if(sess==='s') return `${y} Summer Term ${t} (UBC-V)`;
+  return `${y} Term ${t} (UBC-V)`;
+}
+function exportWD(){
+  const subj=D.subject||'', num=D.number||'';
+  const rows=[['Student Id','Student Preferred Name','Student Last Name','Grade','Grade Note','Academic Period','Course Subject Code','Course Number','Section Number','Status','Updated By']];
+  for(const st of D.students){ const t=totals(st);
+    rows.push([st.snum||'',st.first||'',st.last||'',t?String(t.grade):'',dnwOf(st)?'DNW':'',workdayPeriod(D.term),subj,num,st.section||D.section||'','','']); }
+  const csv='﻿'+rows.map(r=>r.map(v=>/[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v).join(',')).join('\r\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download=(((D.subject||'')+(D.number||''))||'course')+'_grade_records.csv';
+  a.click(); URL.revokeObjectURL(a.href);
+}
+
+/* ════ wiring ════ */
+document.addEventListener('change',e=>{
+  const t=e.target, d=t.dataset;
+  if(d.mark!==undefined){ const st=D.students[+d.si]; const v=t.value.trim();
+    if(v===''){ delete st.marks[d.mark]; } else if(isFinite(+v)){ st.marks[d.mark]=+v; } else { alert('marks are numbers (or blank)'); return; }
+    save(); render(); return; }
+  if(d.sf!==undefined){ D.students[+d.si][d.sf]=t.value.trim(); save(); refresh(); return; }
+  if(d.ctitle!==undefined){ D.cols.find(c=>c.id===d.ctitle).title=t.value.trim(); save(); return; }
+  if(d.ccode!==undefined){ const c=D.cols.find(c=>c.id===d.ccode);
+    if(t.value.trim()==='***') starGesture(c);
+    else c.code=t.value.replace(/[^A-Za-z0-9]/g,'');
+    save(); render(); return; }
+  if(d.cform!==undefined){ const c=D.cols.find(c=>c.id===d.cform);
+    if(t.value.trim()==='***') starGesture(c);   // the gesture works here too
+    else c.formula=t.value.trim();
+    save(); render(); return; }
+  if(d.cw!==undefined){ const c=D.cols.find(c=>c.id===d.cw); const v=parseFloat(t.value); c.weight=isFinite(v)?v:null; save(); render(); return; }
+  if(d.rawform!==undefined){ D.rawFormula=t.value.trim(); save(); render(); return; }
+  if(d.gradeform!==undefined){ D.gradeFormula=t.value.trim(); save(); render(); return; }
+  if(t.id==='fsubj'){ D.subject=t.value.trim(); save(); refresh(); return; }
+  if(t.id==='fnum'){ D.number=t.value.trim(); save(); refresh(); return; }
+  if(t.id==='fsec'){ D.section=t.value.trim(); save(); return; }
+  if(t.id==='fterm'){ D.term=t.value.trim(); save(); refresh(); return; }
+  if(t.id==='bucket'){ BUCKET=t.value; refresh(); return; }
+
+});
+document.getElementById('filter').addEventListener('input',e=>{ FILTER=e.target.value; refresh(); });
+document.getElementById('jsonfile').addEventListener('change',e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onerror=()=>alert('Could not read that file.');
+  r.onload=()=>{ try{ const d=JSON.parse(r.result);
+      if(!d||!Array.isArray(d.cols)||!Array.isArray(d.students)) throw new Error('not a gradebook data file');
+      D=d; save(); SERIES=null; render();
+    }catch(err){ alert('Load failed: '+err.message); } };
+  r.readAsText(f);
+  e.target.value='';
+});
+document.getElementById('csvfile').addEventListener('change',e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onerror=()=>alert('Could not read that file: '+(r.error&&r.error.message||'unknown error'));
+  r.onload=()=>{ try{ importCSV(r.result); }catch(err){ alert('Import failed: '+err.message); } };
+  r.readAsText(f);
+  e.target.value='';
+});
+document.addEventListener('click',e=>{
+  if(e.target.closest('[data-stutog]')){ STUCOL=!STUCOL; render(); return; }
+  const ck=e.target.closest('[data-ck]');
+  if(ck){ const id=ck.dataset.ck; SERIES.has(id)?SERIES.delete(id):SERIES.add(id); ck.classList.toggle('on'); refresh(); return; }
+  const dc=e.target.closest('[data-delcol]');
+  if(dc){ if(!confirm('Remove this column and its marks?')) return;
+    D.cols=D.cols.filter(c=>c.id!==dc.dataset.delcol);
+    D.students.forEach(st=>delete st.marks[dc.dataset.delcol]); save(); SERIES=null; render(); return; }
+  const ds=e.target.closest('[data-delstu]');
+  if(ds){ if(!confirm('Remove this student?')) return; D.students.splice(+ds.dataset.delstu,1); save(); render(); return; }
+  const so=e.target.closest('th.sortable');
+  if(so&&!e.target.closest('input')){ const k=so.dataset.sort;
+    SORT=(SORT&&SORT.k===k)?{k,asc:!SORT.asc}:{k,asc:k==='__name__'};
+    const val=st=>k==='__name__'?nameOf(st):k==='__snum__'?(st.snum||''):colVal(k,st);
+    D.students.sort((a,b)=>{ let va=val(a),vb=val(b);
+      if(typeof va==='string'||typeof vb==='string') return String(va??'').localeCompare(String(vb??''))*(SORT.asc?1:-1);
+      va=va==null?-Infinity:va; vb=vb==null?-Infinity:vb; return (va-vb)*(SORT.asc?1:-1); });
+    save(); render(); return; }
+  if(e.target.id==='addcol'){ D.cols.push({id:uid(),title:'New assessment',code:'',formula:'',weight:null}); save(); SERIES=null; render(); return; }
+  if(e.target.id==='addstu'){ D.students.push({snum:'',first:'',last:'',section:'',marks:{}}); save(); render(); return; }
+  if(e.target.id==='importbtn'){ document.getElementById('csvfile').click(); return; }
+  if(e.target.id==='dl'){ const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([JSON.stringify(D)],{type:'application/json'}));
+    a.download=(((D.subject||'')+(D.number||''))||'gradebook')+'_gradebook.json';
+    a.click(); URL.revokeObjectURL(a.href); return; }
+  if(e.target.id==='loadbtn'){ document.getElementById('jsonfile').click(); return; }
+  if(e.target.id==='wd'){ exportWD(); return; }
+  if(e.target.id==='wipe'){ if(!confirm('Erase EVERYTHING stored in this browser for this gradebook?')) return;
+    localStorage.removeItem(KEY); D={subject:'',number:'',section:'',term:'',cols:[],students:[],rawFormula:'',gradeFormula:''}; SERIES=null; render(); return; }
+});
+render();
+</script>
+</body>
+</html>
