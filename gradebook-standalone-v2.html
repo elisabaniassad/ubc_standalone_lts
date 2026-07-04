@@ -155,10 +155,30 @@ let SERIES=null, FILTER='', BUCKET='LETTER', SORT=null, STUCOL=false; const COLL
 function load(){
   try{
     const x=JSON.parse(localStorage.getItem(KEY));
-    if(x&&x.d&&x.ts&&(Date.now()-x.ts)<TTL) return x.d;
+    if(x&&x.d&&x.ts&&(Date.now()-x.ts)<TTL) return sanitize(x.d);
   }catch(e){}
   localStorage.removeItem(KEY);           // expired (or the old un-stamped format)
   return null;
+}
+// old sessions (pre-hierarchy, pre-Workday-fields) get coerced into the
+// current shape: missing fields default, dangling parents detach, marks
+// for deleted columns drop — no more half-migrated weirdness
+function sanitize(d){
+  if(!d||typeof d!=='object') return null;
+  d.subject=d.subject||''; d.number=d.number||''; d.section=d.section||''; d.term=d.term||'';
+  d.rawFormula=d.rawFormula||''; d.gradeFormula=d.gradeFormula||''; d.schemeNotes=d.schemeNotes||'';
+  if(d.code&&!d.subject){ const m=/^(.*\S)\s+(\S+)$/.exec(d.code); d.subject=m?m[1]:d.code; d.number=m?m[2]:''; }
+  delete d.code;
+  d.cols=(Array.isArray(d.cols)?d.cols:[]).filter(c=>c&&c.id&&c.title!=null).map(c=>({
+    id:String(c.id), title:String(c.title), code:c.code||'', formula:c.formula||'',
+    weight:(c.weight==null||c.weight==='')?null:+c.weight, parent:c.parent||null}));
+  const ids=new Set(d.cols.map(c=>c.id));
+  d.cols.forEach(c=>{ if(c.parent&&(!ids.has(c.parent)||c.parent===c.id)) c.parent=null; });
+  d.cols.forEach(c=>{ if(c.parent&&d.cols.find(x=>x.id===c.parent).parent) c.parent=null; });  // one level only
+  d.students=(Array.isArray(d.students)?d.students:[]).filter(st=>st&&typeof st==='object').map(st=>({
+    snum:st.snum||'', first:st.first||'', last:st.last||'', section:st.section||'',
+    marks:Object.fromEntries(Object.entries(st.marks||{}).filter(([k,v])=>ids.has(k)&&v!=null&&v!==''))}));
+  return d;
 }
 // while the page sits open, the STORED copy still expires (in-memory work is
 // untouched — Download data remains the real save)
@@ -631,7 +651,7 @@ document.getElementById('jsonfile').addEventListener('change',e=>{
   const f=e.target.files[0]; if(!f) return;
   const r=new FileReader();
   r.onerror=()=>alert('Could not read that file.');
-  r.onload=()=>{ try{ const d=JSON.parse(r.result);
+  r.onload=()=>{ try{ const d=sanitize(JSON.parse(r.result));
       if(!d||!Array.isArray(d.cols)||!Array.isArray(d.students)) throw new Error('not a gradebook data file');
       D=d; save(); SERIES=null; render();
     }catch(err){ alert('Load failed: '+err.message); } };
