@@ -89,7 +89,7 @@
   .grip { cursor:grab; color:var(--muted); padding:0 6px 0 2px; }
   .indent { border:none; background:none; cursor:pointer; color:var(--muted); padding:0 4px; font-size:12px; }
   .indent:hover { color:var(--line); background:none; }
-  .tri { border:none; background:none; cursor:pointer; color:var(--line); padding:0 5px; font-size:15px; line-height:1; }
+  .tri { border:none; background:none; cursor:pointer; color:var(--line); padding:0 8px; font-size:19px; line-height:1; margin-left:auto; }
   .tri:hover { background:none; color:#0a4a86; }
 
   table.scheme tr.child td { background:#fafafa; }
@@ -389,11 +389,11 @@ function render(){
     // preceding SIBLING (same parent) = what → would nest this under
     const sibs=D.cols.filter(x=>(x.parent||null)===(c.parent||null));
     const prevSib=sibs[sibs.indexOf(c)-1];
-    const ind=(parent?`<button class="tri" data-tog="${c.id}" title="show/hide the components under ${esc(c.title)}">${COLL.has(c.id)?'▸':'▾'}</button>`:'')
-      +(prevSib?`<button class="indent" data-ind="${c.id}" title="indent under ${esc(prevSib.title)} (its formula then folds this)">→</button>`:'')
-      +(child?`<button class="indent" data-out="${c.id}" title="promote one level up">←</button>`:'');
+    const ind=(prevSib?`<button class="indent" data-ind="${c.id}" title="make this a sub-component of ${esc(prevSib.title)} — nothing moves, only the depth changes">→</button>`:'')
+      +(child?`<button class="indent" data-out="${c.id}" title="promote one level up — later siblings become its sub-components, so nothing moves">←</button>`:'');
+    const tri=parent?`<button class="tri" data-tog="${c.id}" title="show/hide the components under ${esc(c.title)}">${COLL.has(c.id)?'▸':'▾'}</button>`:'';
     return `<tr${child?' class="child"':''} data-cid="${c.id}">
-      <td style="padding-left:${6+depth*22}px"><span style="display:flex;align-items:center"><span class="grip" draggable="true" data-drag="${c.id}" title="drag to reorder">≡</span>${ind}<input data-ctitle="${c.id}" value="${esc(c.title)}"></span></td>
+      <td style="padding-left:${6+depth*22}px"><span style="display:flex;align-items:center"><span class="grip" draggable="true" data-drag="${c.id}" title="drag to reorder">≡</span>${ind}<input data-ctitle="${c.id}" value="${esc(c.title)}" style="flex:1;width:auto">${tri}</span></td>
       <td><input data-ccode="${c.id}" value="${esc(c.code||'')}" placeholder="—"></td>
       <td><input data-cform="${c.id}" value="${esc(c.formula||'')}" placeholder="—" title="${parent?'folds the indented children: DROP(LOWEST[,n]) · DROP(HIGHEST[,n]) · SUM · MAX · MIN · then SCALE(n)/expressions':'SCALE(10) · if(this>89,100) · clamp(this,0,100) · other columns\' codes'}"></td>
       <td class="pctcol"><input class="wpct" data-cw="${c.id}" value="${c.weight??''}" inputmode="decimal" placeholder="${child?'eq':''}" title="${child?'share WITHIN '+esc((D.cols.find(x=>x.id===c.parent)||{}).title||'the parent')+' — blank = equal weighting (the default); the parent\'s formula can change how they combine':'% of course grade'}">%</td>
@@ -709,17 +709,21 @@ document.addEventListener('click',e=>{
   if(ind){ const c=D.cols.find(x=>x.id===ind.dataset.ind);
     const sibs=D.cols.filter(x=>(x.parent||null)===(c.parent||null));
     const prevSib=sibs[sibs.indexOf(c)-1];
-    if(prevSib){   // nest under the preceding sibling, at the end of its subtree
-      const tail=[prevSib,...subtreeOf(prevSib.id)].filter(x=>x!==c&&!inSubtree(c.id,x));
-      moveBlock(c,prevSib.id,D.cols.indexOf(tail[tail.length-1])+1);
+    if(prevSib){
+      // depth-only: c already sits right after prevSib's block, so becoming
+      // its last child changes NOTHING visually except the indentation
+      c.parent=prevSib.id;
+      COLL.delete(prevSib.id);           // never indent into an invisible place
       save(); SERIES=null; render(); }
     return; }
   const out=e.target.closest('[data-out]');
   if(out){ const c=D.cols.find(x=>x.id===out.dataset.out);
     const parent=D.cols.find(x=>x.id===c.parent); if(!parent) return;
-    // step up one level, landing right after the parent's subtree
-    const tail=[parent,...subtreeOf(parent.id)].filter(x=>x!==c&&!inSubtree(c.id,x));
-    moveBlock(c,parent.parent||null,D.cols.indexOf(tail[tail.length-1])+1);
+    // depth-only: later siblings become c's children (they already sit after
+    // it), so the visual order is untouched — only depths change
+    const sibs=D.cols.filter(x=>x.parent===parent.id);
+    sibs.slice(sibs.indexOf(c)+1).forEach(x=>{ x.parent=c.id; });
+    c.parent=parent.parent||null;
     save(); SERIES=null; render(); return; }
   const ds=e.target.closest('[data-delstu]');
   if(ds){ if(!confirm('Remove this student?')) return; D.students.splice(+ds.dataset.delstu,1); save(); render(); return; }
