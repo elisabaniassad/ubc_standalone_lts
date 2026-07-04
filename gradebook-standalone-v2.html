@@ -83,7 +83,8 @@
   table.scheme td.xcol, table.scheme th.xcol { border:none; width:30px; text-align:center; }
   /* the indent/outdent column: a narrow, bordered, first-class table column
      snug against the component names — only the TEXT indents */
-  table.scheme td.ctl, table.scheme th.ctl { width:76px; white-space:nowrap; text-align:center; padding:2px 3px; }
+  table.scheme td.gripcol, table.scheme th.gripcol { width:30px; text-align:center; padding:2px 2px; }
+  table.scheme td.ctl, table.scheme th.ctl { width:56px; white-space:nowrap; text-align:center; padding:2px 3px; }
   table.scheme input { font:inherit; border:none; background:transparent; padding:2px 4px; width:100%; box-sizing:border-box; }
   table.scheme input:focus { outline:none; background:#fff; box-shadow:inset 0 0 0 1px var(--line); }
   table.scheme input.wpct { width:48px; text-align:right; }
@@ -128,7 +129,7 @@ Parent folds: <code>DROP(LOWEST[,n])</code>/<code>DROP(HIGHEST[,n])</code> · <c
 Grade formula extras: <code>BUMP(89-&gt;90,79-&gt;80)</code> boosts those exact values only; <code>n0(TB)</code> reads a code as 0 when blank (bonus columns).<br>
 A <b>Final Exam</b> column scoring exactly 0 flags <b>DNW</b>.</p>
 
-<h2>Overall grade calculation</h2>
+<h2 style="display:flex;align-items:center">Overall grade calculation<span style="flex:1"></span><button id="schdl" style="font-weight:400;text-transform:none;letter-spacing:0" title="save the SCHEME (structure, codes, formulas, weights — no students, no marks) as a file">Download scheme</button><button id="schload" style="font-weight:400;text-transform:none;letter-spacing:0;margin-left:8px" title="load a scheme file: components match your existing columns by title/code; marks are kept">Load scheme</button></h2>
 <div id="calc"></div>
 
 <h2>Grade distribution</h2>
@@ -396,22 +397,20 @@ function render(){
       +(prevSib?`<button class="indent" data-ind="${c.id}" title="make this a sub-component of ${esc(prevSib.title)} — nothing moves, only the depth changes">→</button>`:'');
     const tri=parent?`<button class="tri" data-tog="${c.id}" title="show/hide the components under ${esc(c.title)}">${COLL.has(c.id)?'▸':'▾'}</button>`:'';
     return `<tr${child?' class="child"':''} data-cid="${c.id}">
-      <td class="ctl"><span class="grip" draggable="true" data-drag="${c.id}" title="drag to reorder">≡</span>${ind}</td>
+      <td class="gripcol"><span class="grip" draggable="true" data-drag="${c.id}" title="drag to reorder">≡</span></td>
+      <td class="ctl">${ind}</td>
       <td><input data-ccode="${c.id}" value="${esc(c.code||'')}" placeholder="—" style="text-align:center"></td>
       <td style="padding-left:${8+depth*24}px"><span style="display:flex;align-items:center"><input data-ctitle="${c.id}" value="${esc(c.title)}" style="flex:1;width:auto">${tri}</span></td>
       <td><input data-cform="${c.id}" value="${esc(c.formula||'')}" placeholder="—" title="${parent?'folds the indented children: DROP(LOWEST[,n]) · DROP(HIGHEST[,n]) · SUM · MAX · MIN · then SCALE(n)/expressions':'SCALE(10) · if(this>89,100) · clamp(this,0,100) · other columns\' codes'}"></td>
       <td class="pctcol"><input class="wpct" data-cw="${c.id}" value="${c.weight??''}" inputmode="decimal" placeholder="${child?'eq':''}" title="${child?'share WITHIN '+esc((D.cols.find(x=>x.id===c.parent)||{}).title||'the parent')+' — blank = equal weighting (the default); the parent\'s formula can change how they combine':'% of course grade'}">%</td>
       <td class="xcol"><button class="x" data-delcol="${c.id}" title="remove ${esc(c.title)}${parent?' (its children become top-level)':' and its marks'}">×</button></td></tr>`; };
-  document.getElementById('calc').innerHTML=`<p class="bar" style="margin:4px 0">
-      <button id="schdl" title="save the SCHEME (structure, codes, formulas, weights — no students, no marks) as a file">Download scheme</button>
-      <button id="schload" title="load a scheme file: components match your existing columns by title/code; marks are kept">Load scheme</button>
-    </p><table class="scheme">
-    <tr><th class="ctl"></th><th class="codecol">Code</th><th>Component <button id="addcol" class="plus" title="add a component">+</button></th><th class="formcol">Formula</th><th class="pctcol">%</th><th class="xcol"></th></tr>
+  document.getElementById('calc').innerHTML=`<table class="scheme">
+    <tr><th class="gripcol"></th><th class="ctl"></th><th class="codecol">Code</th><th>Component <button id="addcol" class="plus" title="add a component">+</button></th><th class="formcol">Formula</th><th class="pctcol">%</th><th class="xcol"></th></tr>
     ${ordered.map(rowOf).join('')}
-    <tr><td class="ctl"></td><td></td><td>Course grade</td>
+    <tr><td class="gripcol"></td><td class="ctl"></td><td></td><td>Course grade</td>
       <td><input data-rawform value="${esc(D.rawFormula||'')}" placeholder="weighted sum" title="Raw formula" style="width:48%"><input data-gradeform value="${esc(D.gradeFormula||'')}" placeholder="—" title="Grade formula (optional) — e.g. ROUND()+BOOST" style="width:48%"></td>
       <td class="pctcol"></td><td class="xcol"></td></tr>
-    <tr class="totalrow"><td class="ctl"></td><td></td><td>TOTAL</td><td>${sumOk?'':'<span class="err">should be 100</span>'}</td><td class="pctcol${sumOk?'':' err'}">${Math.round(wsum*10)/10}%</td><td class="xcol"></td></tr></table>
+    <tr class="totalrow"><td class="gripcol"></td><td class="ctl"></td><td></td><td>TOTAL</td><td>${sumOk?'':'<span class="err">should be 100</span>'}</td><td class="pctcol${sumOk?'':' err'}">${Math.round(wsum*10)/10}%</td><td class="xcol"></td></tr></table>
     <p><input data-schemenotes value="${esc(D.schemeNotes||'')}" placeholder="scheme notes (pass criteria, hurdles, policies — travels with the scheme file)" style="width:100%;max-width:900px;border:1px solid var(--shade);padding:4px 8px;color:var(--muted)"></p>`;
   const selRow=sub('In chart',(c,i)=>`<span class="gbck${SERIES.has(c.id)?' on':''}" data-ck="${c.id}"><span class="dot" style="background:${color(i)}"></span></span>`,
     `<td class="gsep gbck${SERIES.has('__total__')?' on':''}" data-ck="__total__"><span class="dot" style="background:#444"></span></td><td></td><td></td><td></td>`);
