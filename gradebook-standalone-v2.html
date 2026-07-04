@@ -397,8 +397,8 @@ function render(){
     const tri=parent?`<button class="tri" data-tog="${c.id}" title="show/hide the components under ${esc(c.title)}">${COLL.has(c.id)?'▸':'▾'}</button>`:'';
     return `<tr${child?' class="child"':''} data-cid="${c.id}">
       <td class="ctl">${ind}</td>
+      <td><input data-ccode="${c.id}" value="${esc(c.code||'')}" placeholder="—" style="text-align:center"></td>
       <td style="padding-left:${8+depth*24}px"><span style="display:flex;align-items:center"><input data-ctitle="${c.id}" value="${esc(c.title)}" style="flex:1;width:auto">${tri}</span></td>
-      <td><input data-ccode="${c.id}" value="${esc(c.code||'')}" placeholder="—"></td>
       <td><input data-cform="${c.id}" value="${esc(c.formula||'')}" placeholder="—" title="${parent?'folds the indented children: DROP(LOWEST[,n]) · DROP(HIGHEST[,n]) · SUM · MAX · MIN · then SCALE(n)/expressions':'SCALE(10) · if(this>89,100) · clamp(this,0,100) · other columns\' codes'}"></td>
       <td class="pctcol"><input class="wpct" data-cw="${c.id}" value="${c.weight??''}" inputmode="decimal" placeholder="${child?'eq':''}" title="${child?'share WITHIN '+esc((D.cols.find(x=>x.id===c.parent)||{}).title||'the parent')+' — blank = equal weighting (the default); the parent\'s formula can change how they combine':'% of course grade'}">%</td>
       <td class="xcol"><button class="x" data-delcol="${c.id}" title="remove ${esc(c.title)}${parent?' (its children become top-level)':' and its marks'}">×</button></td></tr>`; };
@@ -406,12 +406,12 @@ function render(){
       <button id="schdl" title="save the SCHEME (structure, codes, formulas, weights — no students, no marks) as a file">Download scheme</button>
       <button id="schload" title="load a scheme file: components match your existing columns by title/code; marks are kept">Load scheme</button>
     </p><table class="scheme">
-    <tr><th class="ctl"></th><th>Component <button id="addcol" class="plus" title="add a component">+</button></th><th class="codecol">Code</th><th class="formcol">Formula</th><th class="pctcol">%</th><th class="xcol"></th></tr>
+    <tr><th class="ctl"></th><th class="codecol">Code</th><th>Component <button id="addcol" class="plus" title="add a component">+</button></th><th class="formcol">Formula</th><th class="pctcol">%</th><th class="xcol"></th></tr>
     ${ordered.map(rowOf).join('')}
-    <tr><td class="ctl"></td><td>Course grade</td><td></td>
+    <tr><td class="ctl"></td><td></td><td>Course grade</td>
       <td><input data-rawform value="${esc(D.rawFormula||'')}" placeholder="weighted sum" title="Raw formula" style="width:48%"><input data-gradeform value="${esc(D.gradeFormula||'')}" placeholder="—" title="Grade formula (optional) — e.g. ROUND()+BOOST" style="width:48%"></td>
       <td class="pctcol"></td><td class="xcol"></td></tr>
-    <tr class="totalrow"><td class="ctl"></td><td>TOTAL</td><td></td><td>${sumOk?'':'<span class="err">should be 100</span>'}</td><td class="pctcol${sumOk?'':' err'}">${Math.round(wsum*10)/10}%</td><td class="xcol"></td></tr></table>
+    <tr class="totalrow"><td class="ctl"></td><td></td><td>TOTAL</td><td>${sumOk?'':'<span class="err">should be 100</span>'}</td><td class="pctcol${sumOk?'':' err'}">${Math.round(wsum*10)/10}%</td><td class="xcol"></td></tr></table>
     <p><input data-schemenotes value="${esc(D.schemeNotes||'')}" placeholder="scheme notes (pass criteria, hurdles, policies — travels with the scheme file)" style="width:100%;max-width:900px;border:1px solid var(--shade);padding:4px 8px;color:var(--muted)"></p>`;
   const selRow=sub('In chart',(c,i)=>`<span class="gbck${SERIES.has(c.id)?' on':''}" data-ck="${c.id}"><span class="dot" style="background:${color(i)}"></span></span>`,
     `<td class="gsep gbck${SERIES.has('__total__')?' on':''}" data-ck="__total__"><span class="dot" style="background:#444"></span></td><td></td><td></td><td></td>`);
