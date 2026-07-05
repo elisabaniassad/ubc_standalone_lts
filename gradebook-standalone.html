@@ -180,6 +180,7 @@ Load or save a grading scheme — a set of formulas for calculating grades.</p>
   <b>Grade</b> (stages, comma-separated) — <code>ROUND()</code> · <code>ROUNDUP</code> / <code>ROUNDDOWN</code> · <code>BOOST(n)</code> lift to a letter boundary within n · <code>BUMP(a-&gt;b, …)</code> remap exact values<br>
   <b>Missing values</b> — <code>or(a, b)</code> first that exists · <code>orzero(a)</code> = <code>or(a, 0)</code><br>
   <b>Move weight</b> — <code>if(this&lt;50, moveto(a))</code> hands this component's weight to code <code>a</code> when the test holds (e.g. a failed midterm onto the final)<br>
+  <b>Plain words work too</b> — <code>less than</code>, <code>at least</code>, <code>at most</code>, <code>move weight to</code> … e.g. <i>If MT is less than 48, move weight to FIN</i><br>
   <b>Course Raw</b> — <code>***</code> as a code or formula marks the course Raw column · <b>Cap rule</b> — a condition over codes → a maximum grade
 </div>
 
@@ -300,6 +301,21 @@ function applyBoost(v,f){ const m=/\+\s*boost\s*(?:\(\s*(\d+(?:\.\d+)?)\s*\))?/i
 /* tiny safe expression evaluator: numbers, this, SHORT CODES (via lookup),
    + - * / ( ), if(cond,then[,else]), clamp(x,a,b), min/max(a,b), comparisons
    inside if. No eval(). */
+// a light natural-language layer so a rule can read like a sentence —
+// "If MT is less than 48, move weight to FIN" becomes if(MT<48, moveto(FIN)).
+// Applied when a formula is saved, so the engine only ever sees the symbols.
+function canon(f){
+  if(!f) return f;
+  let t=' '+f+' ';
+  t=t.replace(/\b(?:is\s+)?(?:greater\s+than\s+or\s+equal\s+to|at\s+least|no\s+less\s+than)\b/gi,' >= ');
+  t=t.replace(/\b(?:is\s+)?(?:less\s+than\s+or\s+equal\s+to|at\s+most|no\s+more\s+than)\b/gi,' <= ');
+  t=t.replace(/\b(?:is\s+)?(?:less\s+than|below|under)\b/gi,' < ');
+  t=t.replace(/\b(?:is\s+)?(?:greater\s+than|more\s+than|above|over)\b/gi,' > ');
+  t=t.replace(/\b(?:is\s+equal\s+to|equal\s+to|equals)\b/gi,' == ');
+  t=t.replace(/\bmove\s+(?:weight\s+)?to\s+([A-Za-z_][A-Za-z0-9_]*)/gi,'moveto($1)');
+  t=t.replace(/\bif\s+(?!\()(.+?)\s*,\s*(.+?)\s*$/i,(m,a,b)=>`if(${a.trim()}, ${b.trim()})`);
+  return t.replace(/\s+/g,' ').trim();
+}
 function evalExpr(value,src,lookup,wlookup,wantMove){
   if(!src) return value;
   src=src.replace(/^\s*=/,'');          // spreadsheet fingers: "=TG" means TG
@@ -1060,7 +1076,8 @@ const fmlsafe=t=>{ t=String(t??''); return /^[=+\-@\t\r]/.test(t)?"'"+t:t; };
 // a default short code from a title: initials (Learning Logs 3 -> LL3),
 // uniquified against the codes already taken
 function genCode(title,taken){
-  let g=(String(title).match(/[A-Za-z0-9]+/g)||['C']).map(w=>/^\d+$/.test(w)?w:w[0]).join('').toUpperCase().slice(0,10);
+  let g=/^\s*final\s*exam\b/i.test(title)?'FIN'
+       :(String(title).match(/[A-Za-z0-9]+/g)||['C']).map(w=>/^\d+$/.test(w)?w:w[0]).join('').toUpperCase().slice(0,10);
   if(g.replace(/\d/g,'').length<1) g='C'+g;
   let out=g,n=1;
   while(taken.has(out)) out=g+(++n);
@@ -1118,14 +1135,14 @@ document.addEventListener('change',e=>{
     save(); render(); return; }
   if(d.cform!==undefined){ const c=D.cols.find(c=>c.id===d.cform);
     if(t.value.trim()==='***') starGesture(c);   // the gesture works here too
-    else c.formula=t.value.trim();
+    else c.formula=canon(t.value.trim());
     save(); render(); return; }
   if(d.cw!==undefined){ const c=D.cols.find(c=>c.id===d.cw); const v=parseFloat(t.value); c.weight=isFinite(v)?v:null; save(); render(); return; }
   if(d.cmax!==undefined){ const c=D.cols.find(c=>c.id===d.cmax); const v=parseFloat(t.value); c.max=v>0?v:null; save(); render(); return; }
-  if(d.rawform!==undefined){ D.rawFormula=t.value.trim(); save(); render(); return; }
-  if(d.gradeform!==undefined){ D.gradeFormula=t.value.trim(); save(); render(); return; }
+  if(d.rawform!==undefined){ D.rawFormula=canon(t.value.trim()); save(); render(); return; }
+  if(d.gradeform!==undefined){ D.gradeFormula=canon(t.value.trim()); save(); render(); return; }
   if(d.schemenotes!==undefined){ D.schemeNotes=t.value.trim(); save(); return; }
-  if(d.capcond!==undefined){ (D.capRules=D.capRules||[])[+d.capcond].cond=t.value.trim(); save(); render(); return; }
+  if(d.capcond!==undefined){ (D.capRules=D.capRules||[])[+d.capcond].cond=canon(t.value.trim()); save(); render(); return; }
   if(d.capto!==undefined){ (D.capRules=D.capRules||[])[+d.capto].to=parseFloat(t.value); save(); render(); return; }
   if(t.id==='fsubj'){ D.subject=t.value.trim(); save(); refresh(); return; }
   if(t.id==='fnum'){ D.number=t.value.trim(); save(); refresh(); return; }
