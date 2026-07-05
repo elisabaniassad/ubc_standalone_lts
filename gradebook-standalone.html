@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Gradebook v2</title>
+<title>Grade Checker</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,400;0,600;0,700&display=swap" rel="stylesheet">
 <style>
@@ -148,7 +148,7 @@
 </style>
 </head>
 <body>
-<h1>Grade Double Checker <span class="note">— double-check grades here. Everything stays on this machine; browser storage self-clears 2 hours after your last change (Download data to keep work longer); nothing leaves it except your exports.</span></h1>
+<h1>Grade Checker <span class="note">— check grades here. Everything stays on this machine; browser storage self-clears 2 hours after your last change (Download data to keep work longer); nothing leaves it except your exports.</span></h1>
 
 <div class="setup bar">
   <label>Academic Period <input id="fterm" placeholder="2025-26 Winter Term 2 (UBC-V)" style="width:230px" title="copied into the Workday export exactly as typed"></label>
@@ -307,20 +307,36 @@ function applyBoost(v,f){ const m=/\bboost\s*(?:\(\s*(\d+(?:\.\d+)?)\s*\))?/i.ex
 function canon(f){
   if(!f) return f;
   let t=' '+f+' ';
+  // "X of (…)" — 'of' reads like an opening paren
+  t=t.replace(/\bweighted\s+(?:sum|average|mean|avg)\s+of\b/gi,'wavg');
+  t=t.replace(/\b(?:average|mean|avg)\s+of\b/gi,'avg');
+  t=t.replace(/\bmax(?:imum)?\s+of\b/gi,'max');
+  t=t.replace(/\bmin(?:imum)?\s+of\b/gi,'min');
+  t=t.replace(/\bsum\s+of\b/gi,'sum');
+  // a bare 'weighted sum/average' = the default weighted mean (this, at raw level)
+  t=t.replace(/\bweighted\s+(?:sum|average|mean|avg)\b/gi,'this');
+  // comparisons (longest phrases first; an optional leading 'is' is absorbed)
   t=t.replace(/\b(?:is\s+)?(?:greater\s+than\s+or\s+equal\s+to|at\s+least|no\s+less\s+than)\b/gi,' >= ');
   t=t.replace(/\b(?:is\s+)?(?:less\s+than\s+or\s+equal\s+to|at\s+most|no\s+more\s+than)\b/gi,' <= ');
   t=t.replace(/\b(?:is\s+)?(?:less\s+than|below|under)\b/gi,' < ');
   t=t.replace(/\b(?:is\s+)?(?:greater\s+than|more\s+than|above|over)\b/gi,' > ');
-  t=t.replace(/\b(?:is\s+equal\s+to|equal\s+to|equals)\b/gi,' == ');
-  t=t.replace(/\bround\s+up\b/gi,'roundup');
-  t=t.replace(/\bround\s+down\b/gi,'rounddown');
+  t=t.replace(/\b(?:is\s+equal\s+to|equal\s+to|equals|is)\b/gi,' == ');
+  // rounding & bumps in words
+  t=t.replace(/\bround(?:ed)?\s+up\b/gi,'roundup');
+  t=t.replace(/\bround(?:ed)?\s+down\b/gi,'rounddown');
   t=t.replace(/\bbump\s+((?:\d+(?:\.\d+)?)\s*->\s*(?:\d+(?:\.\d+)?)(?:\s*,\s*(?:\d+(?:\.\d+)?)\s*->\s*(?:\d+(?:\.\d+)?))*)/gi,'bump($1)');
-  t=t.replace(/\bmove\s+(?:weight\s+)?to\s+([A-Za-z_][A-Za-z0-9_]*)/gi,'moveto($1)');
+  t=t.replace(/\bboost\s+of\s+(\d+(?:\.\d+)?)/gi,'boost($1)');
+  // drop lowest/highest in words
+  t=t.replace(/\bdrop\s+(?:the\s+)?lowest(?:\s+(\d+))?\b/gi,(m,n)=>n?`drop(lowest,${n})`:'drop(lowest)');
+  t=t.replace(/\bdrop\s+(?:the\s+)?highest(?:\s+(\d+))?\b/gi,(m,n)=>n?`drop(highest,${n})`:'drop(highest)');
+  // move weight
+  t=t.replace(/\bmove\s+(?:the\s+)?(?:weight\s+)?to\s+([A-Za-z_][A-Za-z0-9_]*)/gi,'moveto($1)');
+  // "if COND, THEN" (not already parenthesised)
   t=t.replace(/\bif\s+(?!\()(.+?)\s*,\s*(.+?)\s*$/i,(m,a,b)=>`if(${a.trim()}, ${b.trim()})`);
   return t.replace(/\s+/g,' ').trim();
-}
-function evalExpr(value,src,lookup,wlookup,wantMove){
+}function evalExpr(value,src,lookup,wlookup,wantMove){
   if(!src) return value;
+  src=canon(src);
   src=src.replace(/^\s*=/,'');          // spreadsheet fingers: "=TG" means TG
   if(/^\s*\+/.test(src)) src='this'+src;   // "+TB" means "this + TB"
   let i=0; const s=src;
@@ -334,7 +350,7 @@ function evalExpr(value,src,lookup,wlookup,wantMove){
     const mv=/^moveto\s*\(/i.exec(s.slice(i));
     if(mv){ i+=mv[0].length; ws(); const w=/^[A-Za-z_][A-Za-z0-9_]*/.exec(s.slice(i));
       let nm=''; if(w){ nm=w[0]; i+=w[0].length; } ws(); if(s[i]===')') i++; return {__moveto:nm}; }
-    const fn=/^(if|clamp|min|max|round|roundup|rounddown|orzero|or|n0|wavg|avg)\s*\(/i.exec(s.slice(i));
+    const fn=/^(if|clamp|min|max|round|roundup|rounddown|orzero|or|n0|wavg|avg|sum)\s*\(/i.exec(s.slice(i));
     if(fn&&fn[1].toLowerCase()==='wavg'){
       // WAVG(T1,T2,FIN): codes only — each weighted by its component's course
       // weight; blank references drop out (with their weight)
@@ -356,6 +372,7 @@ function evalExpr(value,src,lookup,wlookup,wantMove){
       if(f==='n0'||f==='orzero') return isFinite(args[0])?args[0]:0;   // orzero(TB) = TB, or 0 when blank
       if(f==='or'){ for(const a of args) if(typeof a==='number'&&isFinite(a)) return a; return NaN; }   // or(TB,0): first value that exists
       if(f==='avg'){ const xs=args.filter(a=>typeof a==='number'&&isFinite(a)); return xs.length?xs.reduce((a,b)=>a+b,0)/xs.length:NaN; }
+      if(f==='sum'){ const xs=args.filter(a=>typeof a==='number'&&isFinite(a)); return xs.reduce((a,b)=>a+b,0); }
       if(f==='if') return (args[0]&&args[0]!==0&&args[0]!==false)?(args[1]??value):(args[2]??value);
       if(f==='clamp') return Math.min(args[2]??100,Math.max(args[1]??0,args[0]));
       // min/max IGNORE blanks (a blank reference is absent, not zero) —
@@ -391,7 +408,7 @@ function evalExpr(value,src,lookup,wlookup,wantMove){
 // the weight-move target for a component whose formula fires moveto(CODE)
 // for this student (else null) — top-level only; used by totals()
 function movetoTarget(st,c){
-  if(!/moveto\s*\(/i.test(c.formula||'')) return null;
+  if(!/moveto\s*\(/i.test(canon(c.formula||''))) return null;
   const v=colGrade(st,c);
   const r=evalExpr(v==null?NaN:v, c.formula, codeLookup(st), codeWeight, true);
   if(r&&typeof r==='object'&&r.__moveto){
@@ -400,7 +417,7 @@ function movetoTarget(st,c){
   }
   return null;
 }
-function isExpr(f){ return /this|if\s*\(|clamp\s*\(/i.test(f||''); }
+function isExpr(f){ f=canon(f); return /this|if\s*\(|clamp\s*\(/i.test(f||''); }
 const kidsOf=id=>D.cols.filter(x=>x.parent===id);
 const subtreeOf=id=>{ const out=[]; (function w(pid){ for(const c of D.cols) if(c.parent===pid){ out.push(c); w(c.id); } })(id); return out; };
 const inSubtree=(aid,c)=>{ let x=c,hop=0; while(x&&x.parent&&hop++<50){ if(x.parent===aid) return true; x=D.cols.find(y=>y.id===x.parent); } return false; };
@@ -415,6 +432,7 @@ function moveBlock(c,newParent,idx){
 /* fold a parent's children: DROP(LOWEST[,n]) / DROP(HIGHEST[,n]) (never drops
    them all), SUM (capped 100), MAX, MIN; default = weight-weighted mean */
 function aggregate(xs,f){
+  f=canon(f);
   let list=[...xs];
   // KEEP(HW5,…) protects members (by short code) from being dropped
   const kp=/keep\s*\(([^)]*)\)/i.exec(f||'');
@@ -435,11 +453,11 @@ function aggregate(xs,f){
   return list.reduce((a,x)=>a+x.g*(+x.w),0)/W;
 }
 const FKEYWORDS=new Set(['this','if','clamp','min','max','round','roundup','rounddown','scale','boost','bump','keep','lowest','highest','sum','drop','avg','n0','orzero','or','wavg','moveto']);
-function codeRefs(f){ const ids=(f||'').match(/[A-Za-z_][A-Za-z0-9_]*/g)||[];
+function codeRefs(f){ f=canon(f); const ids=(f||'').match(/[A-Za-z_][A-Za-z0-9_]*/g)||[];
   return ids.some(w=>!FKEYWORDS.has(w.toLowerCase())&&D.cols.some(c=>(c.code||'').toLowerCase()===w.toLowerCase())); }
 // names that are neither keywords nor any column's short code: a formula
 // containing one silently computes NOTHING — so we make it loud instead
-function unknownRefs(f){ const ids=(f||'').match(/[A-Za-z_][A-Za-z0-9_]*/g)||[];
+function unknownRefs(f){ f=canon(f); const ids=(f||'').match(/[A-Za-z_][A-Za-z0-9_]*/g)||[];
   return [...new Set(ids.filter(w=>!FKEYWORDS.has(w.toLowerCase())
     &&!D.cols.some(c=>(c.code||'').toLowerCase()===w.toLowerCase())))]; }
 function fmClass(f){ return unknownRefs(f).length?' badformula':''; }
@@ -534,8 +552,8 @@ function totals(st){
   };
   // COURSE GRADE formula first, then round to a whole number, then the
   // boosts/bumps formula (so BUMP(89->90) sees an integer to match)
-  for(const stg of splitStages(D.gradeFormula||'')) applyStage(stg);
-  for(const stg of splitStages(D.boostFormula||'')) applyStage(stg);
+  for(const stg of splitStages(canon(D.gradeFormula||''))) applyStage(stg);
+  for(const stg of splitStages(canon(D.boostFormula||''))) applyStage(stg);
   if(!rounded) g=Math.round(g);          // whole number if nothing rounded explicitly
   // GRADE CAP RULES: policy hurdles as their own thing — when a rule's
   // condition holds, the grade is capped at the rule's value (min, so a
@@ -1148,15 +1166,15 @@ document.addEventListener('change',e=>{
     save(); render(); return; }
   if(d.cform!==undefined){ const c=D.cols.find(c=>c.id===d.cform);
     if(t.value.trim()==='***') starGesture(c);   // the gesture works here too
-    else c.formula=canon(t.value.trim());
+    else c.formula=t.value.trim();
     save(); render(); return; }
   if(d.cw!==undefined){ const c=D.cols.find(c=>c.id===d.cw); const v=parseFloat(t.value); c.weight=isFinite(v)?v:null; save(); render(); return; }
   if(d.cmax!==undefined){ const c=D.cols.find(c=>c.id===d.cmax); const v=parseFloat(t.value); c.max=v>0?v:null; save(); render(); return; }
-  if(d.rawform!==undefined){ D.rawFormula=canon(t.value.trim()); save(); render(); return; }
-  if(d.gradeform!==undefined){ D.gradeFormula=canon(t.value.trim()); save(); render(); return; }
-  if(d.boostform!==undefined){ D.boostFormula=canon(t.value.trim()); save(); render(); return; }
+  if(d.rawform!==undefined){ D.rawFormula=t.value.trim(); save(); render(); return; }
+  if(d.gradeform!==undefined){ D.gradeFormula=t.value.trim(); save(); render(); return; }
+  if(d.boostform!==undefined){ D.boostFormula=t.value.trim(); save(); render(); return; }
   if(d.schemenotes!==undefined){ D.schemeNotes=t.value.trim(); save(); return; }
-  if(d.capcond!==undefined){ const rs=D.capRules=D.capRules||[]; const i=+d.capcond; if(!rs[i]) rs[i]={cond:'',to:''}; rs[i].cond=canon(t.value.trim()); save(); render(); return; }
+  if(d.capcond!==undefined){ const rs=D.capRules=D.capRules||[]; const i=+d.capcond; if(!rs[i]) rs[i]={cond:'',to:''}; rs[i].cond=t.value.trim(); save(); render(); return; }
   if(d.capto!==undefined){ const rs=D.capRules=D.capRules||[]; const i=+d.capto; if(!rs[i]) rs[i]={cond:'',to:''}; rs[i].to=parseFloat(t.value); save(); render(); return; }
   if(t.id==='fsubj'){ D.subject=t.value.trim(); save(); refresh(); return; }
   if(t.id==='fnum'){ D.number=t.value.trim(); save(); refresh(); return; }
