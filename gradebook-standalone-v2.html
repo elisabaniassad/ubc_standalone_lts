@@ -224,6 +224,7 @@ function applyBoost(v,f){ const m=/\+\s*boost\s*(?:\(\s*(\d+(?:\.\d+)?)\s*\))?/i
 function evalExpr(value,src,lookup){
   if(!src) return value;
   src=src.replace(/^\s*=/,'');          // spreadsheet fingers: "=TG" means TG
+  if(/^\s*\+/.test(src)) src='this'+src;   // "+TB" means "this + TB"
   let i=0; const s=src;
   const ws=()=>{ while(i<s.length&&/\s/.test(s[i])) i++; };
   function primary(){ ws();
@@ -633,6 +634,59 @@ function importCSV(text){
   alert(`${added} students added, ${updated} updated, ${gradeCols.length} assessment columns.`);
 }
 
+/* ════ a minimal .xlsx writer — an xlsx is a ZIP of XML; Workday's upload
+   tool refuses CSV, so we build the real thing: stored (uncompressed) zip,
+   one sheet, inline strings; numbers stay numbers, ids stay text ════ */
+const CRC_T=(()=>{ const t=new Uint32Array(256);
+  for(let n=0;n<256;n++){ let c=n; for(let k=0;k<8;k++) c=c&1?0xEDB88320^(c>>>1):c>>>1; t[n]=c>>>0; }
+  return t; })();
+function crc32(u8){ let c=0xFFFFFFFF;
+  for(let i=0;i<u8.length;i++) c=CRC_T[(c^u8[i])&0xFF]^(c>>>8);
+  return (c^0xFFFFFFFF)>>>0; }
+function zipStore(files){                     // [{name, data:Uint8Array}]
+  const enc=new TextEncoder(); const chunks=[]; const central=[]; let off=0;
+  const u16=v=>[v&255,(v>>8)&255], u32=v=>[v&255,(v>>8)&255,(v>>16)&255,(v>>>24)&255];
+  for(const f of files){
+    const name=enc.encode(f.name), crc=crc32(f.data);
+    const head=new Uint8Array([0x50,0x4B,3,4, ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0),
+      ...u32(crc), ...u32(f.data.length), ...u32(f.data.length), ...u16(name.length), ...u16(0)]);
+    chunks.push(head,name,f.data);
+    central.push({name,crc,size:f.data.length,off});
+    off+=head.length+name.length+f.data.length;
+  }
+  const cdStart=off; let cdLen=0;
+  for(const c of central){
+    const rec=new Uint8Array([0x50,0x4B,1,2, ...u16(20), ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0),
+      ...u32(c.crc), ...u32(c.size), ...u32(c.size), ...u16(c.name.length), ...u16(0), ...u16(0),
+      ...u16(0), ...u16(0), ...u32(0), ...u32(c.off)]);
+    chunks.push(rec,c.name); cdLen+=rec.length+c.name.length;
+  }
+  chunks.push(new Uint8Array([0x50,0x4B,5,6, ...u16(0), ...u16(0), ...u16(central.length), ...u16(central.length),
+    ...u32(cdLen), ...u32(cdStart), ...u16(0)]));
+  let total=0; for(const c of chunks) total+=c.length;
+  const out=new Uint8Array(total); let q=0;
+  for(const c of chunks){ out.set(c,q); q+=c.length; }
+  return out;
+}
+const xesc=t=>String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+function xlsxOf(rows){                        // rows: arrays of strings/numbers
+  const colL=i=>{ let n=i+1,r=''; while(n){ r=String.fromCharCode(64+((n-1)%26+1))+r; n=Math.floor((n-1)/26); } return r; };
+  const body=rows.map((r,ri)=>`<row r="${ri+1}">`+r.map((v,ci)=>
+    (typeof v==='number'&&isFinite(v))
+      ?`<c r="${colL(ci)}${ri+1}" t="n"><v>${v}</v></c>`
+      :`<c r="${colL(ci)}${ri+1}" t="inlineStr"><is><t xml:space="preserve">${xesc(v??'')}</t></is></c>`
+  ).join('')+'</row>').join('');
+  const enc=new TextEncoder();
+  const files=[
+    {name:'[Content_Types].xml',data:enc.encode('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>')},
+    {name:'_rels/.rels',data:enc.encode('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>')},
+    {name:'xl/workbook.xml',data:enc.encode('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Grades" sheetId="1" r:id="rId1"/></sheets></workbook>')},
+    {name:'xl/_rels/workbook.xml.rels',data:enc.encode('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>')},
+    {name:'xl/worksheets/sheet1.xml',data:enc.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${body}</sheetData></worksheet>`)},
+  ];
+  return zipStore(files);
+}
+
 /* ════ Workday export (the SIS grammar) ════ */
 function workdayPeriod(label){
   const m=/(\d{4})\s*([wsa])\s*(\d+)?/i.exec(label||''); if(!m) return label||'';
@@ -645,11 +699,12 @@ function exportWD(){
   const subj=D.subject||'', num=D.number||'';
   const rows=[['Student Id','Student Preferred Name','Student Last Name','Grade','Grade Note','Academic Period','Course Subject Code','Course Number','Section Number','Status','Updated By']];
   for(const st of D.students){ const t=totals(st);
-    rows.push([st.snum||'',st.first||'',st.last||'',t?String(t.grade):'',dnwOf(st)?'DNW':'',workdayPeriod(D.term),subj,num,st.section||D.section||'','','']); }
-  const csv='﻿'+rows.map(r=>r.map(v=>/[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v).join(',')).join('\r\n');
+    rows.push([st.snum||'',st.first||'',st.last||'',t?t.grade:'',dnwOf(st)?'DNW':'',workdayPeriod(D.term),subj,num,st.section||D.section||'','','']); }
+  // Workday's upload tool accepts ONLY Excel files — so it gets a real one
+  // (grades as numbers; student ids as text, protecting leading zeros)
   const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
-  a.download=(((D.subject||'')+(D.number||''))||'course')+'_grade_records.csv';
+  a.href=URL.createObjectURL(new Blob([xlsxOf(rows)],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+  a.download=(((D.subject||'')+(D.number||''))||'course')+'_grade_records.xlsx';
   a.click(); URL.revokeObjectURL(a.href);
 }
 
