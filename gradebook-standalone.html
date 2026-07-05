@@ -96,6 +96,7 @@
   #gbtable td.gcell { cursor:pointer; }
   #gbtable td.gcell:hover { background:var(--shade); }
   table.scheme th, table.scheme td { border:1px solid var(--line); text-align:left; overflow:hidden; }
+  table.scheme th { background:#d8e9f6; }   /* the scheme header: pale blue */
   table.scheme th.pctcol, table.scheme td.pctcol { width:7%; text-align:center; white-space:nowrap; }
   table.scheme th.codecol { width:4%; text-align:center; }
   table.scheme th.formcol { width:30%; }
@@ -122,7 +123,7 @@
   table.scheme tr.child td { background:#fafafa; }
   /* a component WITH children is a fold — it reads pale blue, like the
      grid's computed columns */
-  table.scheme tr.parentrow td { background:#eaf3fa; }
+  table.scheme tr.parentrow td { background:#eef6fc; }   /* parents: a paler blue than the header */
   input.badformula { background:#fde7e4 !important; }
   /* per-cell overrides (LMS1): set = pale orange, exempt/moveto = grey */
   td.ovset { background:#ffe6c4; cursor:pointer; }
