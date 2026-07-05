@@ -117,6 +117,9 @@
   /* per-cell overrides (LMS1): set = pale orange, exempt/moveto = grey */
   td.ovset { background:#ffe6c4; cursor:pointer; }
   td.ovin { background:#fff3e0; }      /* a fold containing an overridden grade */
+  td.capd { background:#ffd9a8; }      /* grade pulled down by a cap rule: orange */
+  td.bmp  { background:#e3f2df; }      /* grade lifted by a BUMP pair: pale green */
+  td.bst  { background:#bfe3b8; }      /* grade lifted by BOOST: the darker green */
   td.ovex { background:#e4e7ea; color:var(--muted); cursor:pointer; }
   .gbwas { font-size:10px; color:var(--muted); }
   #ovpop { position:fixed; inset:0; background:rgba(0,0,0,.25); z-index:9; }
@@ -419,7 +422,7 @@ function totals(st){
   // left to right; a stage is token ops (SCALE/ROUND/BUMP/BOOST) or an
   // expression over this + codes (the hurdle if()s come after the rounding)
   const stages=splitStages(D.gradeFormula||'');
-  let rounded=false, boosted=false;
+  let rounded=false, boosted=false, bumped=false;
   const tokenOnly=x=>x.replace(/scale\s*\([^)]*\)/ig,'').replace(/bump\s*\([^)]*\)/ig,'')
     .replace(/\+?\s*boost\s*(\([^)]*\))?/ig,'').replace(/round(up|down)?\s*(\(\s*\))?/ig,'').replace(/[+\s]/g,'')==='';
   for(const stg of stages){
@@ -431,7 +434,7 @@ function totals(st){
       const bm=/bump\s*\(([^)]*)\)/i.exec(stg);
       if(bm) for(const pr of bm[1].split(',')){
         const m2=/(-?\d+(?:\.\d+)?)\s*->\s*(-?\d+(?:\.\d+)?)/.exec(pr);
-        if(m2&&g===+m2[1]){ g=+m2[2]; boosted=true; break; }
+        if(m2&&g===+m2[1]){ g=+m2[2]; bumped=true; break; }
       }
       const b=applyBoost(g,stg); if(b.boosted) boosted=true; g=b.v;
     } else if(isExpr(stg)||codeRefs(stg)) g=evalExpr(g,stg,codeLookup(st),codeWeight);
@@ -440,16 +443,17 @@ function totals(st){
   // GRADE CAP RULES: policy hurdles as their own thing — when a rule's
   // condition holds, the grade is capped at the rule's value (min, so a
   // student already below the cap keeps their computed grade)
-  const capsHit=[];
+  const capsHit=[]; const gPre=g;
   for(const r of (D.capRules||[])){
     if(!r.cond||!isFinite(+r.to)) continue;
     const hit=evalExpr(0,`if(${r.cond},1,0)`,codeLookup(st),codeWeight)===1;
     if(hit){ capsHit.push(r); g=Math.min(g,Math.round(+r.to)); }
   }
+  const capped=capsHit.length>0&&g<gPre;   // matched a rule AND it moved the grade down
   // the course-total override (the discretionary word): final say, with reason
   const tov=st.ov&&st.ov.__total__;
   const grade=tov?Math.round(+tov.value):g;
-  return {raw,grade,boosted:boosted&&!tov&&!capsHit.length,overridden:!!tov,computed:g,capsHit}; }
+  return {raw,grade,bumped,boosted,overridden:!!tov,computed:g,capsHit,capped}; }
 // split on commas/semicolons at parenthesis depth 0 — the commas inside
 // BUMP(89->90,79->80) and if(HW<40,45) are payload, not separators
 function splitStages(src){
@@ -553,22 +557,21 @@ function render(){
       <td class="pctcol"></td>
       ${statCells(statsOf(D.students.map(st=>{ const t=totals(st); return t?t.raw:null; })))}
       <td class="xcol"></td></tr>
+    ${((D.capRules||[]).length?D.capRules:[null]).map((r,ri)=>{
+      const nhit=r?D.students.filter(st=>{ const t=totals(st); return t&&t.capsHit.includes(r); }).length:0;
+      return `<tr><td class="gripcol"></td><td class="ctl"></td><td></td>
+      <td class="note">CAP${ri===0?' <button id="capadd" class="plus" title="add a cap rule">+</button>':''}</td>
+      <td>${r?`<span class="note">if</span> <input class="${fmClass('if('+(r.cond||'this')+',1,0)')}" data-capcond="${ri}" value="${esc(r.cond||'')}" placeholder="e.g. WAVG(T1,T2,T3,FIN)<50" title="${esc(fmTitle('if('+(r.cond||'this')+',1,0)','a condition over codes — matching students show an orange Raw and are capped'))}" style="width:52%"> <span class="note">→ at most</span> <input data-capto="${ri}" value="${r.to??''}" inputmode="decimal" style="width:44px">`
+      :'<span class="note">policy hurdles — e.g. if HW&lt;40, the grade is at most 45</span>'}</td>
+      <td class="pctcol note">${r?(nhit?`${nhit} hit`:''):''}</td>
+      <td class="statcol"></td><td class="statcol"></td><td class="statcol"></td><td class="statcol"></td>
+      <td class="xcol">${r?`<button class="x" data-capdel="${ri}" title="remove this cap rule">×</button>`:''}</td></tr>`; }).join('')}
     <tr><td class="gripcol"></td><td class="ctl"></td><td></td><td>GRADE</td>
       <td><input class="${fmClass(D.gradeFormula)}" data-gradeform value="${esc(D.gradeFormula||'')}" placeholder="—" title="${esc(fmTitle(D.gradeFormula,'Grade formula (optional) — e.g. ROUND()+BOOST'))}"></td>
       <td class="pctcol"></td>
       ${statCells(statsOf(D.students.map(st=>{ const t=totals(st); return t?t.grade:null; })))}
       <td class="xcol"></td></tr>
     <tr class="totalrow"><td class="gripcol"></td><td class="ctl"></td><td></td><td>TOTAL</td><td>${sumOk?'':'<span class="err">should be 100</span>'}</td><td class="pctcol${sumOk?'':' err'}">${Math.round(wsum*10)/10}%</td><td class="statcol"></td><td class="statcol"></td><td class="statcol"></td><td class="statcol"></td><td class="xcol"></td></tr></table>
-    <h3 style="font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:14px 0 4px">Grade cap rules <button id="capadd" class="plus" title="add a cap rule">+</button></h3>
-    <table class="scheme">
-      <tr><th style="width:8%">If</th><th>Condition</th><th style="width:22%">then grade is at most</th><th class="xcol"></th></tr>
-      ${(D.capRules||[]).map((r,ri)=>`<tr>
-        <td class="note">if</td>
-        <td><input class="${fmClass('if('+(r.cond||'this')+',1,0)')}" data-capcond="${ri}" value="${esc(r.cond||'')}" placeholder="e.g. WAVG(T1,T2,T3,FIN)<50 or HW<40" title="${esc(fmTitle('if('+(r.cond||'this')+',1,0)','a condition over codes — students it matches show an orange Raw and are capped'))}"></td>
-        <td><input data-capto="${ri}" value="${r.to??''}" inputmode="decimal" style="width:70px"> <span class="note">(min — nobody is raised)</span></td>
-        <td class="xcol"><button class="x" data-capdel="${ri}" title="remove this cap rule">×</button></td></tr>`).join('')
-      ||'<tr><td colspan="4" class="note" style="border-color:#e6e6e6">none — the policy hurdles (e.g. exams below 50% cap the course at 50) live here</td></tr>'}
-    </table>
     <p><input data-schemenotes value="${esc(D.schemeNotes||'')}" placeholder="scheme notes (pass criteria, hurdles, policies — travels with the scheme file)" style="width:100%;border:1px solid var(--shade);padding:4px 8px;color:var(--muted)"></p></div>
     <div class="ovside">${ovTable}</div></div>`;
   const selRow=sub('In chart',(c,i)=>`<span class="gbck${SERIES.has(c.id)?' on':''}" data-ck="${c.id}"><span class="dot" style="background:${color(i)}"></span></span>`,
@@ -599,6 +602,12 @@ function render(){
       if(fail) return ' class="fail"';
       if(tt.boosted) return ' class="boosted"';
       return ab?' class="atbound"':''; })();
+    const gradeTint=!tt?'':tt.overridden?' ovset':tt.capped?' capd':tt.boosted?' bst':tt.bumped?' bmp':'';
+    const gradeTitle=!tt?'':tt.overridden?(st.ov.__total__.reason||'')+' — click to edit'
+      :tt.capped?`capped by rule: ${tt.capsHit.map(r=>`${r.cond} → at most ${r.to}`).join(' · ')} — click to override`
+      :tt.boosted?'lifted by BOOST — click to override'
+      :tt.bumped?'lifted by a BUMP pair — click to override'
+      :'click to set this student\u2019s course grade (the discretionary cap/fail — reason required)';
     const roster=STUCOL
       ?`<td>${esc(nameOf(st)||st.snum||'—')}</td>`
       :`<td><input data-sf="first" data-si="${si}" value="${esc(st.first||'')}" style="border:none;background:transparent;font:inherit;width:90px"></td>
@@ -622,7 +631,7 @@ function render(){
         }
         return `<td class="gcell${i===0?' gsep':''}${g!=null&&g<50?' fail':''}" data-ovcol="${d.c.id}" data-ovsi="${si}" title="click to edit the mark or override it">${st.marks[d.c.id]??'—'}</td>`; }).join('')
       +`<td class="gsep note${tt&&tt.capsHit&&tt.capsHit.length?' ovin':''}"${tt&&tt.capsHit&&tt.capsHit.length?` title="subject to a cap rule: ${esc(tt.capsHit.map(r=>`${r.cond} → at most ${r.to}`).join(' · '))}"`:''}>${tt?tt.raw:''}</td>
-      <td class="gcell${tt&&tt.overridden?' ovset':''}"${tt&&!tt.overridden?cls:''} data-ovcol="__total__" data-ovsi="${si}" title="${tt&&tt.overridden?esc((st.ov.__total__.reason||''))+' — click to edit':'click to set this student\u2019s course grade (the discretionary cap/fail — reason required)'}">${tt?(tt.overridden?`${tt.grade} <span class="gbwas">(was ${tt.computed})</span>`:tt.grade):''}</td>
+      <td class="gcell${gradeTint}"${!gradeTint&&tt?cls:''} data-ovcol="__total__" data-ovsi="${si}" title="${esc(gradeTitle)}">${tt?(tt.overridden?`${tt.grade} <span class="gbwas">(was ${tt.computed})</span>`:tt.grade):''}</td>
       <td${cls}>${tt?letterOf(tt.grade):''}</td><td>${dnw?'<span class="dnw">DNW</span>':''}</td></tr>`;
   }).join('');
   document.getElementById('grid').innerHTML=D.cols.length||D.students.length
