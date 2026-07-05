@@ -91,7 +91,7 @@
   .lowerwrap .distcol { flex:1 1 52%; min-width:0; }
   table.ovtable { width:100%; table-layout:fixed; }
   table.ovtable th, table.ovtable td { border:1px solid var(--line); text-align:left; font-size:12px; padding:3px 7px; overflow-wrap:break-word; }
-  table.ovtable th.sid { width:88px; }
+  table.ovtable th.sid { width:26%; }
   table.ovtable tr[data-ovcol] { cursor:pointer; }
   table.ovtable tr[data-ovcol]:hover td { background:var(--shade); }
   #gbtable td.gcell { cursor:pointer; }
@@ -717,7 +717,7 @@ function render(){
       :`${c.title}: weight → ${(x=>x?(x.code||x.title):'?')(D.cols.find(x=>x.id===ov.to))}`;
     ovRows.push(`<tr data-ovcol="${colId}" data-ovsi="${si}" title="click to edit"><td>${esc(nameOf(st)||st.snum||'?')}${st.snum?` <span class="note" style="font-style:italic;font-size:10px">(${esc(st.snum)})</span>`:''}</td><td>${esc(change)}</td><td>${esc(ov.reason||'')}</td></tr>`);
   }});
-  const ovTable=`<table class="ovtable"><tr><th class="sid">Student ID</th><th>Change</th><th>Reason</th></tr>
+  const ovTable=`<table class="ovtable"><tr><th class="sid">Student</th><th>Change</th><th>Reason</th></tr>
     ${ovRows.join('')||'<tr><td colspan="3" class="note" style="border-color:#e6e6e6">none — click a grade in the marks table to add one</td></tr>'}</table>`;
   const schHead=`<tr><th class="gripcol" title="drag a row to reorder">↕</th><th class="ctl">indent</th><th class="codecol">Code</th><th class="statcol outof">out of</th><th>Component <button id="addcol" class="plus" title="add a component">+</button></th><th class="formcol">Formula <button type="button" id="fhintbtn" class="plus" title="formula reference">?</button></th><th class="pctcol">%</th><th class="statcol"><i>lowest</i></th><th class="statcol"><i>highest</i></th><th class="statcol"><i>median</i></th><th class="statcol"><i>average</i></th><th class="xcol"></th></tr>`;
   document.getElementById('calc').innerHTML=!D.cols.length
