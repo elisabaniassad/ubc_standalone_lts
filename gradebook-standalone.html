@@ -168,7 +168,8 @@
   <button class="dark" id="wd">Export for Workday</button>
 </div>
 <p id="storagenote"></p>
-<p class="note">Import a CSV (<code>Student #, First, Last, Section, …one column per assessment…</code>), Load a scheme, or add columns and students by hand. Click any grade to change, exempt, replace, or move its weight (a reason is required; every change is logged in OVERRIDES). A <b>Final Exam</b> column scoring exactly 0 flags <b>DNW</b>.</p>
+<p class="note">Import a CSV indexed by student number. One column per assessment. Separate CSVs will integrate based on student number.<br>
+Load or save a grading scheme — a set of formulas for calculating grades.</p>
 
 <h2>Overall grade calculation</h2>
 <div id="calc"></div>
@@ -195,6 +196,7 @@
 </div>
 
 <h2>Marks</h2>
+<p class="note" style="font-size:11px">Click any grade to change, exempt, replace, or move weight and log a reason.<br>A Final Exam column scoring 0 flags as DNW in the "Grade Notes".</p>
 <div class="bar"><input type="search" id="filter" placeholder="Filter — name, student #, section, or a test: >50, 40..60, RAW=45, HW<40, capped, bumped, boosted, overridden, dnw"><span id="filtinfo" class="note"></span></div>
 <div style="overflow-x:auto;padding-bottom:14px"><div id="grid"></div></div>
 
