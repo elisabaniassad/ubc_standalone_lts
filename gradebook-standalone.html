@@ -574,6 +574,7 @@ function render(){
   // ── the calculation table (the Lifeboat layout): components, codes,
   //    formulas, weights — edited HERE; the grid below is marks ──
   const wsum=D.cols.reduce((a,c)=>a+(c.parent?0:(+c.weight||0)),0);
+  const outSum=D.cols.reduce((a,c)=>a+(c.parent?0:((c.max!=null&&c.max!=='')?+c.max:100)),0);   // total points across top-level components
   const sumOk=Math.round(wsum)===100||(!wsum&&(D.rawFormula||D.cols.some(c=>(c.code||'').trim()==='***')));
   // live proof the formulas work: lowest / highest / median student and the
   // average, per component, straight from the marks below
@@ -638,8 +639,9 @@ function render(){
     ${schHead}
     ${ordered.map(rowOf).join('')}
     <tr><td class="gripcol"></td><td class="ctl"></td><td></td><td>RAW</td>
-      <td colspan="2"><input class="${fmClass(D.rawFormula)}" data-rawform value="${esc(D.rawFormula||'')}" placeholder="weighted sum" title="${esc(fmTitle(D.rawFormula,'Raw formula — e.g. this+or(TB,0)'))}"></td>
-      <td class="pctcol${sumOk?'':' err'}" title="sum of the component weights — reaches 100 when the scheme is complete">${Math.round(wsum*10)/10}/100</td>
+      <td class="statcol note" title="total points across the components">/${Math.round(outSum*10)/10}</td>
+      <td><input class="${fmClass(D.rawFormula)}" data-rawform value="${esc(D.rawFormula||'')}" placeholder="weighted sum" title="${esc(fmTitle(D.rawFormula,'Raw formula — e.g. this+or(TB,0)'))}"></td>
+      <td class="pctcol${sumOk?'':' err'}" title="sum of the component weights — should reach 100">${Math.round(wsum*10)/10}%</td>
       ${statCells(statsOf(D.students.map(st=>{ const t=totals(st); return t?t.raw:null; })))}
       <td class="xcol"></td></tr>
     ${((D.capRules||[]).length?D.capRules:[null]).map((r,ri)=>{
@@ -648,14 +650,13 @@ function render(){
       <td class="note" style="white-space:nowrap">GRADE CAP RULE${ri===0?' <button id="capadd" class="plus" title="add a cap rule">+</button>':''}</td>
       <td colspan="2">${r?`<span class="note">if</span> <input class="${fmClass('if('+(r.cond||'this')+',1,0)')}" data-capcond="${ri}" value="${esc(r.cond||'')}" placeholder="e.g. WAVG(T1,T2,T3,FIN)<50" title="${esc(fmTitle('if('+(r.cond||'this')+',1,0)','a condition over codes — matching students show an orange Raw and are capped'))}" style="width:46%"> <span class="note" style="font-size:10px;white-space:nowrap">→ max course grade</span> <input data-capto="${ri}" value="${esc(r.to??'')}" inputmode="decimal" style="width:40px">${isFinite(+r.to)&&r.to!=null&&r.to!==''?` <span class="note" style="font-size:10px">(${letterOf(+r.to)})</span>`:''}`
       :'<span class="note">policy hurdles — e.g. if HW&lt;40, the grade is at most 45</span>'}</td>
-      <td class="pctcol note" title="students this rule caps">${r?(nhit?`${nhit} \u0394`:''):''}</td>
+      <td class="pctcol note" style="border:none" title="students this rule caps">${r?(nhit?`${nhit} Δ`:''):''}</td>
       <td class="statcol"></td><td class="statcol"></td><td class="statcol"></td><td class="statcol"></td>
       <td class="xcol">${r?`<button class="x" data-capdel="${ri}" title="remove this cap rule">×</button>`:''}</td></tr>`; }).join('')}
     <tr><td class="gripcol"></td><td class="ctl"></td><td></td><td>GRADE</td>
       <td colspan="3"><input class="${fmClass(D.gradeFormula)}" data-gradeform value="${esc(D.gradeFormula||'')}" placeholder="—" title="${esc(fmTitle(D.gradeFormula,'Grade formula (optional) — e.g. ROUND()+BOOST'))}"></td>
       ${statCells(statsOf(D.students.map(st=>{ const t=totals(st); return t?t.grade:null; })))}
-      <td class="xcol"></td></tr></table>
-    <p><input data-schemenotes value="${esc(D.schemeNotes||'')}" placeholder="scheme notes (pass criteria, hurdles, policies — travels with the scheme file)" style="width:100%;border:1px solid var(--shade);padding:4px 8px;color:var(--muted)"></p>`;
+      <td class="xcol"></td></tr></table>`;
   document.getElementById('ovmount').innerHTML=ovTable;
   const selRow=sub('In chart',(c,i)=>`<span class="gbck${SERIES.has(c.id)?' on':''}" data-ck="${c.id}"><span class="dot" style="background:${color(i)}"></span></span>`,
     `<td class="gsep gbck${SERIES.has('__raw__')?' on':''}" data-ck="__raw__"><span class="dot" style="background:#999"></span></td><td class="gbck${SERIES.has('__total__')?' on':''}" data-ck="__total__"><span class="dot" style="background:#444"></span></td><td></td><td></td>`);
