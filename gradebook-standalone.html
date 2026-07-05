@@ -625,7 +625,7 @@ function render(){
       <td class="ctl">${ind}</td>
       <td><input data-ccode="${c.id}" value="${esc(c.code||'')}" placeholder="—" style="text-align:center"></td>
       <td class="statcol"><input data-cmax="${c.id}" value="${esc(c.max??'')}" inputmode="decimal" placeholder="100" title="out of — what this column is scored out of; half of it draws the fail line" style="width:100%;text-align:center;border:none;background:transparent;font-size:10px;color:var(--muted)"></td>
-      <td style="padding-left:${8+depth*24}px"><span style="display:flex;align-items:center"><input data-ctitle="${c.id}" value="${esc(c.title)}" style="flex:1;width:auto">${tri}</span></td>
+      <td style="padding-left:${8+depth*24}px"><span style="display:flex;align-items:center"><input data-ctitle="${c.id}" value="${esc(c.title)}" placeholder="new component" style="flex:1;width:auto">${tri}</span></td>
       <td><input class="${fmClass(c.formula)}" data-cform="${c.id}" value="${esc(c.formula||'')}" placeholder="—" title="${esc(fmTitle(c.formula, parent?'folds the indented children: DROP(LOWEST[,n]) · DROP(HIGHEST[,n]) · SUM · MAX · MIN · then SCALE(n)/expressions':"SCALE(10) · if(this>89,100) · clamp(this,0,100) · other columns' codes"))}"></td>
       <td class="pctcol"><input class="wpct" data-cw="${c.id}" value="${esc(c.weight??'')}" inputmode="decimal" placeholder="${child?'eq':''}" title="${child?'share WITHIN '+esc((D.cols.find(x=>x.id===c.parent)||{}).title||'the parent')+' — blank = equal weighting (the default); the parent\'s formula can change how they combine':'% of course grade'}">%</td>
       ${statCells(compStats(c))}
@@ -658,17 +658,16 @@ function render(){
       <td class="pctcol${sumOk?'':' err'}" title="sum of the component weights — should reach 100">${Math.round(wsum*10)/10}%</td>
       ${statCells(statsOf(D.students.map(st=>{ const t=totals(st); return t?t.raw:null; })))}
       <td class="xcol"></td></tr>
-    ${((D.capRules||[]).length?D.capRules:[null]).map((r,ri)=>{
-      const nhit=r?D.students.filter(st=>{ const t=totals(st); return t&&t.capsHit.includes(r); }).length:0;
+    ${((D.capRules||[]).length?D.capRules:[{cond:'',to:''}]).map((r,ri)=>{
+      const nhit=(r&&r.cond)?D.students.filter(st=>{ const t=totals(st); return t&&t.capsHit.includes(r); }).length:0;
       return `<tr><td class="gripcol"></td><td class="ctl"></td><td></td>
       <td class="statcol"></td>
       <td class="note" style="white-space:nowrap">GRADE CAP RULE${ri===0?' <button id="capadd" class="plus" title="add a cap rule">+</button>':''}</td>
-      <td>${r?`<span class="note">if</span> <input class="${fmClass('if('+(r.cond||'this')+',1,0)')}" data-capcond="${ri}" value="${esc(r.cond||'')}" placeholder="e.g. WAVG(T1,T2,T3,FIN)<50" title="${esc(fmTitle('if('+(r.cond||'this')+',1,0)','a condition over codes — matching students show an orange Raw and are capped'))}" style="width:46%"> <span class="note" style="font-size:10px;white-space:nowrap">→ max course grade</span> <input data-capto="${ri}" value="${esc(r.to??'')}" inputmode="decimal" style="width:40px">${isFinite(+r.to)&&r.to!=null&&r.to!==''?` <span class="note" style="font-size:10px">(${letterOf(+r.to)})</span>`:''}`
-      :'<span class="note">policy hurdles — e.g. if HW&lt;40, the grade is at most 45</span>'}</td>
+      <td>${r?`<span class="note">if</span> <input class="${fmClass('if('+(r.cond||'this')+',1,0)')}" data-capcond="${ri}" value="${esc(r.cond||'')}" placeholder="e.g. WAVG(T1,T2,T3,FIN)<50" title="${esc(fmTitle('if('+(r.cond||'this')+',1,0)','a condition over codes — matching students show an orange Raw and are capped'))}" style="width:46%"> <span class="note" style="font-size:10px;white-space:nowrap">→ max course grade</span> <input data-capto="${ri}" value="${esc(r.to??'')}" inputmode="decimal" style="width:40px">${isFinite(+r.to)&&r.to!=null&&r.to!==''?` <span class="note" style="font-size:10px">(${letterOf(+r.to)})</span>`:''}`:''}</td>
       <td class="pctcol note" style="border:none" title="students this rule caps">${r?(nhit?`${nhit} Δ`:''):''}</td>
       <td class="statcol"></td><td class="statcol"></td><td class="statcol"></td><td class="statcol"></td>
-      <td class="xcol">${r?`<button class="x" data-capdel="${ri}" title="remove this cap rule">×</button>`:''}</td></tr>`; }).join('')}
-    <tr><td class="gripcol"></td><td class="ctl"></td><td></td><td class="statcol"></td><td>GRADE</td>
+      <td class="xcol">${(D.capRules&&D.capRules[ri])?`<button class="x" data-capdel="${ri}" title="remove this cap rule">×</button>`:''}</td></tr>`; }).join('')}
+    <tr><td class="gripcol"></td><td class="ctl"></td><td></td><td class="statcol"></td><td>COURSE GRADE</td>
       <td colspan="2"><input class="${fmClass(D.gradeFormula)}" data-gradeform value="${esc(D.gradeFormula||'')}" placeholder="—" title="${esc(fmTitle(D.gradeFormula,'Grade formula (optional) — e.g. ROUND()+BOOST'))}"></td>
       ${statCells(statsOf(D.students.map(st=>{ const t=totals(st); return t?t.grade:null; })))}
       <td class="xcol"></td></tr></table>`;
@@ -1086,7 +1085,7 @@ function genCode(title,taken){
 }
 function fillCodes(cols){
   const taken=new Set(cols.map(c=>(c.code||'').toUpperCase()).filter(Boolean));
-  cols.forEach(c=>{ if(!c.code) c.code=genCode(c.title,taken); });
+  cols.forEach(c=>{ if(!c.code && String(c.title||'').trim()) c.code=genCode(c.title,taken); });
 }
 function xlsxOf(rows){                        // rows: arrays of strings/numbers
   const colL=i=>{ let n=i+1,r=''; while(n){ r=String.fromCharCode(64+((n-1)%26+1))+r; n=Math.floor((n-1)/26); } return r; };
@@ -1128,7 +1127,7 @@ document.addEventListener('change',e=>{
     if(v===''){ delete st.marks[d.mark]; } else if(isFinite(+v)){ st.marks[d.mark]=+v; } else { alert('marks are numbers (or blank)'); return; }
     save(); render(); return; }
   if(d.sf!==undefined){ D.students[+d.si][d.sf]=t.value.trim(); save(); refresh(); return; }
-  if(d.ctitle!==undefined){ D.cols.find(c=>c.id===d.ctitle).title=t.value.trim(); save(); return; }
+  if(d.ctitle!==undefined){ const c=D.cols.find(c=>c.id===d.ctitle); c.title=t.value.trim(); if(!c.code&&c.title) c.code=genCode(c.title,new Set(D.cols.map(x=>(x.code||'').toUpperCase()).filter(Boolean))); save(); render(); return; }
   if(d.ccode!==undefined){ const c=D.cols.find(c=>c.id===d.ccode);
     if(t.value.trim()==='***') starGesture(c);
     else c.code=t.value.replace(/[^A-Za-z0-9]/g,'');
@@ -1142,8 +1141,8 @@ document.addEventListener('change',e=>{
   if(d.rawform!==undefined){ D.rawFormula=canon(t.value.trim()); save(); render(); return; }
   if(d.gradeform!==undefined){ D.gradeFormula=canon(t.value.trim()); save(); render(); return; }
   if(d.schemenotes!==undefined){ D.schemeNotes=t.value.trim(); save(); return; }
-  if(d.capcond!==undefined){ (D.capRules=D.capRules||[])[+d.capcond].cond=canon(t.value.trim()); save(); render(); return; }
-  if(d.capto!==undefined){ (D.capRules=D.capRules||[])[+d.capto].to=parseFloat(t.value); save(); render(); return; }
+  if(d.capcond!==undefined){ const rs=D.capRules=D.capRules||[]; const i=+d.capcond; if(!rs[i]) rs[i]={cond:'',to:''}; rs[i].cond=canon(t.value.trim()); save(); render(); return; }
+  if(d.capto!==undefined){ const rs=D.capRules=D.capRules||[]; const i=+d.capto; if(!rs[i]) rs[i]={cond:'',to:''}; rs[i].to=parseFloat(t.value); save(); render(); return; }
   if(t.id==='fsubj'){ D.subject=t.value.trim(); save(); refresh(); return; }
   if(t.id==='fnum'){ D.number=t.value.trim(); save(); refresh(); return; }
   if(t.id==='fsec'){ D.section=t.value.trim(); save(); return; }
@@ -1301,9 +1300,8 @@ document.addEventListener('click',e=>{
   const cd=e.target.closest('[data-capdel]');
   if(cd){ D.capRules.splice(+cd.dataset.capdel,1); save(); render(); return; }
   if(e.target.id==='addcol'){
-    const c={id:uid(),title:'New component',code:'',formula:'',weight:null,parent:null};
-    fillCodes([...D.cols,c]);
-    D.cols.unshift(c);                     // born at the TOP, right where the + lives
+    const c={id:uid(),title:'',code:'',formula:'',weight:null,parent:null};
+    D.cols.unshift(c);                     // code is assigned once it's named                     // born at the TOP, right where the + lives
     save(); SERIES=null; render();
     const inp=document.querySelector(`input[data-ctitle="${c.id}"]`);
     if(inp){ inp.focus(); inp.select(); }  // and ready to be named
