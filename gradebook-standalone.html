@@ -209,7 +209,7 @@ Load or save a grading scheme — a set of formulas for calculating grades.</p>
    — persisted to localStorage (2h TTL).                 formula (DROP(LOWEST), SUM, AVG…) */
 const KEY='gradebook-standalone.v1';
 const TTL=2*60*60*1000;                   // grade data self-destructs after 2 hours
-let D=load()||{subject:'',number:'',section:'',term:'',cols:[],students:[],rawFormula:'',gradeFormula:''};
+let D=load()||{subject:'',number:'',section:'',term:'',cols:[],students:[],rawFormula:'',gradeFormula:'',boostFormula:''};
 if(D.code&&!D.subject){ const m=/^(.*\S)\s+(\S+)$/.exec(D.code); D.subject=m?m[1]:D.code; D.number=m?m[2]:''; delete D.code; }
 let SERIES=null, FILTER='', BUCKET='LETTER', SORT=null, STUCOL=false; const COLL=new Set();
 function load(){
@@ -226,7 +226,7 @@ function load(){
 function sanitize(d){
   if(!d||typeof d!=='object') return null;
   d.subject=String(d.subject||''); d.number=String(d.number||''); d.section=String(d.section||''); d.term=String(d.term||'');
-  d.rawFormula=String(d.rawFormula||''); d.gradeFormula=String(d.gradeFormula||''); d.schemeNotes=String(d.schemeNotes||'');
+  d.rawFormula=String(d.rawFormula||''); d.gradeFormula=String(d.gradeFormula||''); d.boostFormula=String(d.boostFormula||''); d.schemeNotes=String(d.schemeNotes||'');
   d.capRules=(Array.isArray(d.capRules)?d.capRules:[]).filter(r=>r&&typeof r==='object').map(r=>({cond:String(r.cond||''),to:isFinite(+r.to)?+r.to:null}));
   if(d.code&&!d.subject){ const m=/^(.*\S)\s+(\S+)$/.exec(d.code); d.subject=m?m[1]:d.code; d.number=m?m[2]:''; }
   delete d.code;
@@ -512,11 +512,10 @@ function totals(st){
   // (outside any parentheses; semicolons work too) separate stages, applied
   // left to right; a stage is token ops (SCALE/ROUND/BUMP/BOOST) or an
   // expression over this + codes (the hurdle if()s come after the rounding)
-  const stages=splitStages(D.gradeFormula||'');
   let rounded=false, boosted=false, bumped=false;
   const tokenOnly=x=>x.replace(/scale\s*\([^)]*\)/ig,'').replace(/bump\s*\([^)]*\)/ig,'')
     .replace(/\+?\s*boost\s*(\([^)]*\))?/ig,'').replace(/round(up|down)?\s*(\(\s*\))?/ig,'').replace(/[+\s]/g,'')==='';
-  for(const stg of stages){
+  const applyStage=stg=>{
     if(tokenOnly(stg)){
       g=applyScale(g,stg);
       if(/rounddown/i.test(stg)){ g=Math.floor(g); rounded=true; }
@@ -529,8 +528,12 @@ function totals(st){
       }
       const b=applyBoost(g,stg); if(b.boosted) boosted=true; g=b.v;
     } else if(isExpr(stg)||codeRefs(stg)) g=evalExpr(g,stg,codeLookup(st),codeWeight);
-  }
+  };
+  // COURSE GRADE formula first, then round to a whole number, then the
+  // boosts/bumps formula (so BUMP(89->90) sees an integer to match)
+  for(const stg of splitStages(D.gradeFormula||'')) applyStage(stg);
   if(!rounded) g=Math.round(g);
+  for(const stg of splitStages(D.boostFormula||'')) applyStage(stg);
   // GRADE CAP RULES: policy hurdles as their own thing — when a rule's
   // condition holds, the grade is capped at the rule's value (min, so a
   // student already below the cap keeps their computed grade)
@@ -667,6 +670,10 @@ function render(){
       <td class="pctcol note" style="border:none" title="students this rule caps">${r?(nhit?`${nhit} Δ`:''):''}</td>
       <td class="statcol"></td><td class="statcol"></td><td class="statcol"></td><td class="statcol"></td>
       <td class="xcol">${(D.capRules&&D.capRules[ri])?`<button class="x" data-capdel="${ri}" title="remove this cap rule">×</button>`:''}</td></tr>`; }).join('')}
+    <tr><td class="gripcol"></td><td class="ctl"></td><td></td><td class="statcol"></td><td class="note">boosts/bumps</td>
+      <td colspan="2"><input class="${fmClass(D.boostFormula)}" data-boostform value="${esc(D.boostFormula||'')}" placeholder="e.g. BUMP(89->90,79->80) · +BOOST(1)" title="${esc(fmTitle(D.boostFormula,'boosts & bumps — BUMP(exact->new) · +BOOST(n) lifts to the next letter'))}"></td>
+      <td class="statcol"></td><td class="statcol"></td><td class="statcol"></td><td class="statcol"></td>
+      <td class="xcol"></td></tr>
     <tr><td class="gripcol"></td><td class="ctl"></td><td></td><td class="statcol"></td><td>COURSE GRADE</td>
       <td colspan="2"><input class="${fmClass(D.gradeFormula)}" data-gradeform value="${esc(D.gradeFormula||'')}" placeholder="—" title="${esc(fmTitle(D.gradeFormula,'Grade formula (optional) — e.g. ROUND()+BOOST'))}"></td>
       ${statCells(statsOf(D.students.map(st=>{ const t=totals(st); return t?t.grade:null; })))}
@@ -852,6 +859,7 @@ function schemeText(){
   const L=['# gradebook scheme — indent = hierarchy; fields: code | title | formula | weight% | max'];
   if(D.rawFormula) L.push('raw: '+D.rawFormula);
   if(D.gradeFormula) L.push('grade: '+D.gradeFormula);
+  if(D.boostFormula) L.push('boost: '+D.boostFormula);
   for(const r of (D.capRules||[])) if(r.cond) L.push('cap: '+r.cond+' -> '+(r.to??''));
   if(D.schemeNotes) L.push('notes: '+D.schemeNotes);
   for(const st of D.students){ for(const [k,ov] of Object.entries(st.ov||{})){
@@ -878,10 +886,11 @@ function parseSchemeText(txt){
   const stack=[]; let n=0;
   for(const line of txt.split(/\r?\n/)){
     if(!line.trim()||/^\s*#/.test(line)) continue;
-    const dm=/^(raw|grade|notes|cap|exception)\s*:\s*(.*)$/i.exec(line.trim());
+    const dm=/^(raw|grade|boost|notes|cap|exception)\s*:\s*(.*)$/i.exec(line.trim());
     if(dm){ const k=dm[1].toLowerCase(), v=dm[2].trim();
       if(k==='raw') sch.rawFormula=v;
       else if(k==='grade') sch.gradeFormula=v;
+      else if(k==='boost') sch.boostFormula=v;
       else if(k==='notes') sch.notes=v;
       else if(k==='cap'){ const cm=/^(.*?)(?:->|\u2192)\s*(-?[\d.]+)\s*$/.exec(v);
             if(cm) sch.capRules.push({cond:cm[1].trim(),to:+cm[2]}); }
@@ -930,7 +939,7 @@ function applyScheme(sch){
   fillCodes(D.cols);   // scheme lines may omit codes — every component gets
                        // its generated handle NOW, so formulas like +or(TB,0)
                        // and the exception lines below can resolve
-  D.rawFormula=String(sch.rawFormula||''); D.gradeFormula=String(sch.gradeFormula||'');
+  D.rawFormula=String(sch.rawFormula||''); D.gradeFormula=String(sch.gradeFormula||''); D.boostFormula=String(sch.boostFormula||'');
   if(sch.notes!=null) D.schemeNotes=String(sch.notes);
   if(Array.isArray(sch.capRules)) D.capRules=sch.capRules.filter(r=>r&&typeof r==='object')
     .map(r=>({cond:String(r.cond||''),to:isFinite(+r.to)?+r.to:null}));
@@ -1140,6 +1149,7 @@ document.addEventListener('change',e=>{
   if(d.cmax!==undefined){ const c=D.cols.find(c=>c.id===d.cmax); const v=parseFloat(t.value); c.max=v>0?v:null; save(); render(); return; }
   if(d.rawform!==undefined){ D.rawFormula=canon(t.value.trim()); save(); render(); return; }
   if(d.gradeform!==undefined){ D.gradeFormula=canon(t.value.trim()); save(); render(); return; }
+  if(d.boostform!==undefined){ D.boostFormula=canon(t.value.trim()); save(); render(); return; }
   if(d.schemenotes!==undefined){ D.schemeNotes=t.value.trim(); save(); return; }
   if(d.capcond!==undefined){ const rs=D.capRules=D.capRules||[]; const i=+d.capcond; if(!rs[i]) rs[i]={cond:'',to:''}; rs[i].cond=canon(t.value.trim()); save(); render(); return; }
   if(d.capto!==undefined){ const rs=D.capRules=D.capRules||[]; const i=+d.capto; if(!rs[i]) rs[i]={cond:'',to:''}; rs[i].to=parseFloat(t.value); save(); render(); return; }
@@ -1320,7 +1330,7 @@ document.addEventListener('click',e=>{
   if(e.target.id==='loadbtn'){ document.getElementById('jsonfile').click(); return; }
   if(e.target.id==='wd'){ exportWD(); return; }
   if(e.target.id==='wipe'){ if(!confirm('Erase EVERYTHING stored in this browser for this gradebook?')) return;
-    localStorage.removeItem(KEY); D={subject:'',number:'',section:'',term:'',cols:[],students:[],rawFormula:'',gradeFormula:''}; SERIES=null; render(); return; }
+    localStorage.removeItem(KEY); D={subject:'',number:'',section:'',term:'',cols:[],students:[],rawFormula:'',gradeFormula:'',boostFormula:''}; SERIES=null; render(); return; }
 });
 collapseAll();
 render();
