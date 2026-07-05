@@ -404,7 +404,9 @@ function canon(f){
       if(f==='roundup') return Math.ceil(args[0]);
       if(f==='rounddown') return Math.floor(args[0]);
     }
-    if(/^this/i.test(s.slice(i))){ i+=4; return value; }
+    if(/^this\b/i.test(s.slice(i))){ i+=4; return value; }
+    if(/^empty\b/i.test(s.slice(i))){ i+=5; return (typeof value==='number'&&isFinite(value))?0:1; }
+    if(/^exempt\b/i.test(s.slice(i))){ i+=6; return {__exempt:true}; }
     const num=/^\d+(?:\.\d+)?/.exec(s.slice(i));
     if(num){ i+=num[0].length; return +num[0]; }
     const word=/^[A-Za-z_][A-Za-z0-9_]*/.exec(s.slice(i));
@@ -431,6 +433,7 @@ function canon(f){
     return v; }
   const out=orL();
   if(out&&typeof out==='object'&&out.__moveto) return wantMove?out:value;   // moveto is transparent to the value
+  if(out&&typeof out==='object'&&out.__exempt) return out;                  // exempt drops the component (weight renormalises)
   return (typeof out==='number'&&isFinite(out))?Math.round(out*10)/10:value;
 }
 // the weight-move target for a component whose formula fires moveto(CODE)
@@ -480,7 +483,7 @@ function aggregate(xs,f){
   if(!W) return list.reduce((a,x)=>a+x.g,0)/(list.length||1);   // all-zero shares: plain mean
   return list.reduce((a,x)=>a+x.g*(+x.w),0)/W;
 }
-const FKEYWORDS=new Set(['this','if','clamp','min','max','round','roundup','rounddown','scale','boost','bump','keep','lowest','highest','sum','drop','avg','n0','orzero','or','wavg','moveto']);
+const FKEYWORDS=new Set(['this','if','clamp','min','max','round','roundup','rounddown','scale','boost','bump','keep','lowest','highest','sum','drop','avg','n0','orzero','or','wavg','moveto','empty','exempt']);
 function codeRefs(f){ f=canon(f); const ids=(f||'').match(/[A-Za-z_][A-Za-z0-9_]*/g)||[];
   return ids.some(w=>!FKEYWORDS.has(w.toLowerCase())&&D.cols.some(c=>(c.code||'').toLowerCase()===w.toLowerCase())); }
 // names that are neither keywords nor any column's short code: a formula
