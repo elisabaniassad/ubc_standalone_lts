@@ -91,7 +91,7 @@
   #gbtable td.gcell:hover { background:var(--shade); }
   table.scheme th, table.scheme td { border:1px solid var(--line); text-align:left; overflow:hidden; }
   table.scheme th.pctcol, table.scheme td.pctcol { width:7%; text-align:center; white-space:nowrap; }
-  table.scheme th.codecol { width:5%; }
+  table.scheme th.codecol { width:4%; text-align:center; }
   table.scheme th.formcol { width:30%; }
   table.scheme td.xcol, table.scheme th.xcol { border:none; width:3%; text-align:center; }
   /* reorder + indent: the two narrowest columns; the Component column gets
@@ -107,7 +107,8 @@
   .plus { font-size:15px; line-height:1; padding:1px 8px; }
   .scheme th .plus, .scheme td .plus { float:right; }
   .grip { cursor:grab; color:var(--muted); padding:0 6px 0 2px; }
-  .indent { display:block; margin:0 auto; border:none; background:none; cursor:pointer; color:var(--line); padding:0; font-size:15px; line-height:1; }
+  .indent { display:inline-block; width:15px; border:none; background:none; cursor:pointer; color:var(--line); padding:0; font-size:12px; line-height:1; vertical-align:middle; }
+  .indent.off { color:#e2e2e2; cursor:default; pointer-events:none; }
   .indent:hover { color:#000; background:none; }
   .tri { border:none; background:none; cursor:pointer; color:var(--line); padding:0 8px; font-size:19px; line-height:1; margin-left:auto; }
   .tri:hover { background:none; color:#0a4a86; }
@@ -562,8 +563,10 @@ function render(){
     // preceding SIBLING (same parent) = what → would nest this under
     const sibs=D.cols.filter(x=>(x.parent||null)===(c.parent||null));
     const prevSib=sibs[sibs.indexOf(c)-1];
-    const ind=(child?`<button class="indent" data-out="${c.id}" title="promote one level up — later siblings become its sub-components, so nothing moves">◀</button>`:'')
-      +(prevSib?`<button class="indent" data-ind="${c.id}" title="make this a sub-component of ${esc(prevSib.title)} — nothing moves, only the depth changes">▶</button>`:'');
+    // two fixed slots — outdent ◀ left, indent ▶ right; an unavailable
+    // action greys in place rather than vanishing, so nothing jumps
+    const ind=(child?`<button class="indent" data-out="${c.id}" title="promote one level up — later siblings become its sub-components, so nothing moves">◀</button>`:'<span class="indent off">◀</span>')
+      +(prevSib?`<button class="indent" data-ind="${c.id}" title="make this a sub-component of ${esc(prevSib.title)} — nothing moves, only the depth changes">▶</button>`:'<span class="indent off">▶</span>');
     const tri=parent?`<button class="tri" data-tog="${c.id}" title="show/hide the components under ${esc(c.title)}">${COLL.has(c.id)?'▸':'▾'}</button>`:'';
     return `<tr${parent?' class="parentrow"':(child?' class="child"':'')} data-cid="${c.id}">
       <td class="gripcol"><span class="grip" draggable="true" data-drag="${c.id}" title="drag to reorder">≡</span></td>
