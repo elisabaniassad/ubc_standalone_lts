@@ -819,7 +819,7 @@ function render(){
           const ovIn=st.ov&&subtreeOf(d.c.id).some(k=>st.ov[k.id]);
           return `<td class="computed gcell${ovIn?' ovin':''}${i===0?' gsep':''}${g!=null&&g<(+d.c.max>0?+d.c.max/2:50)?' fail':''}${capSrc.has(d.c.id)?' capsrc':''}" data-ovcol="${d.c.id}" data-ovsi="${si}" title="${esc(d.c.title)} — folded from its indented components${d.c.formula?` by “${esc(d.c.formula)}”`:''}${ovIn?'; CONTAINS AN OVERRIDDEN GRADE':''}; click to override/exempt">${g??'—'}</td>`;
         }
-        return `<td class="gcell${i===0?' gsep':''}${g!=null&&g<(+d.c.max>0?+d.c.max/2:50)?' fail':''}${capSrc.has(d.c.id)?' capsrc':''}" data-ovcol="${d.c.id}" data-ovsi="${si}" title="click to edit the mark or override it">${st.marks[d.c.id]!=null?Math.round(+st.marks[d.c.id]*100)/100:(g??'—')}</td>`; }).join('')
+        return `<td class="gcell${i===0?' gsep':''}${g!=null&&g<(+d.c.max>0?+d.c.max/2:50)?' fail':''}${capSrc.has(d.c.id)?' capsrc':''}" data-ovcol="${d.c.id}" data-ovsi="${si}" title="click to override — every change needs a reason and is logged">${st.marks[d.c.id]!=null?Math.round(+st.marks[d.c.id]*100)/100:(g??'—')}</td>`; }).join('')
       +`<td class="gsep note${tt&&tt.capsHit&&tt.capsHit.length?' ovin':''}"${tt&&tt.capsHit&&tt.capsHit.length?` title="subject to a cap rule: ${esc(tt.capsHit.map(r=>`${r.cond} → at most ${r.to}`).join(' · '))}"`:''}>${tt?tt.raw:''}</td>
       <td class="gcell${gradeTint}"${!gradeTint&&tt?cls:''} data-ovcol="__total__" data-ovsi="${si}" title="${esc(gradeTitle)}">${tt?(tt.overridden?`${tt.grade} <span class="gbwas">(was ${tt.computed})</span>`:tt.grade):''}</td>
       <td${cls}>${tt?letterOf(tt.grade):''}</td><td>${dnw?'<span class="dnw">DNW</span>':''}</td></tr>`;
@@ -1205,9 +1205,6 @@ function exportWD(){
 /* ════ wiring ════ */
 document.addEventListener('change',e=>{
   const t=e.target, d=t.dataset;
-  if(d.mark!==undefined){ const st=D.students[+d.si]; const v=t.value.trim();
-    if(v===''){ delete st.marks[d.mark]; } else if(isFinite(+v)){ st.marks[d.mark]=+v; } else { alert('marks are numbers (or blank)'); return; }
-    save(); render(); return; }
   if(d.sf!==undefined){ D.students[+d.si][d.sf]=t.value.trim(); save(); refresh(); return; }
   if(d.ctitle!==undefined){ const c=D.cols.find(c=>c.id===d.ctitle); c.title=t.value.trim(); if(!c.code&&c.title) c.code=genCode(c.title,new Set(D.cols.map(x=>(x.code||'').toUpperCase()).filter(Boolean))); save(); render(); return; }
   if(d.ccode!==undefined){ const c=D.cols.find(c=>c.id===d.ccode);
@@ -1257,7 +1254,7 @@ function openOverride(colId,si){
   wrap.innerHTML=`<div class="ovcard">
     <div style="display:flex;justify-content:space-between"><b>${esc(c.title)} · ${esc(nameOf(st)||st.snum)}</b><a href="#" class="link" id="ovx">cancel</a></div>
     ${impactNote?`<div class="note" style="font-size:11px;border:1px solid var(--shade);padding:6px 8px;margin:6px 0;line-height:1.5">${impactNote}</div>`:''}
-    ${leaf?`<label>Mark <input type="text" id="ovmark" value="${esc(st.marks[colId]??'')}" placeholder="blank = not graded" style="width:110px"></label><hr style="border:none;border-top:1px solid var(--shade)">`:''}
+
     <label><input type="radio" name="ovact" value="none"${!ov.type?' checked':''}> No override</label>
     ${isTotal?'':`<label><input type="radio" name="ovact" value="exempt"${ov.type==='exempt'?' checked':''}> Exempt — weight moves to the remaining components</label>`}
     <label><input type="radio" name="ovact" value="set"${ov.type==='set'?' checked':''}> Replace the grade with <input type="text" id="ovval" value="${esc(ov.type==='set'?ov.value:'')}" placeholder="%" style="width:70px"></label>
@@ -1274,11 +1271,6 @@ function openOverride(colId,si){
     const act=wrap.querySelector('input[name="ovact"]:checked').value;
     const reason=wrap.querySelector('#ovreason').value.trim();
     if(act!=='none'&&!reason){ wrap.querySelector('#ovreason').focus(); return; }   // no silent overrides
-    const mk=wrap.querySelector('#ovmark');
-    if(mk){ const v=mk.value.trim();
-      if(v===''){ delete st.marks[colId]; }
-      else if(isFinite(+v)) st.marks[colId]=+v;
-      else { alert('marks are numbers (or blank)'); return; } }
     st.ov=st.ov||{};
     if(act==='none') delete st.ov[colId];
     else if(act==='exempt') st.ov[colId]={type:'exempt',reason};
@@ -1402,7 +1394,9 @@ document.addEventListener('click',e=>{
   if(e.target.id==='addstu'){ D.students.push({snum:'',first:'',last:'',section:'',marks:{}}); save(); render(); return; }
   if(e.target.id==='importbtn'){ document.getElementById('csvfile').click(); return; }
   if(e.target.id==='sample'){ if((D.cols.length||D.students.length)&&!confirm('Replace what you have with the sample class?')) return;
-    D=sanitize(JSON.parse(JSON.stringify(SAMPLE))); collapseAll(); save(); SERIES=null; render(); return; }
+    D=sanitize(JSON.parse(JSON.stringify(SAMPLE))); collapseAll(); save();
+    const fe=D.cols.find(c=>/final\s*exam/i.test(c.title)); SERIES=new Set(fe?['__total__',fe.id]:['__total__']);
+    render(); return; }
   if(e.target.id==='savecsv'){ const a=document.createElement('a');
     a.href=URL.createObjectURL(new Blob([gradesCSV()],{type:'text/csv'}));
     a.download=(((D.subject||'')+(D.number||''))||'grades')+'_grades.csv';
