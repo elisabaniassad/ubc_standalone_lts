@@ -893,7 +893,7 @@ function refresh(){
       const as=grades.filter(v=>v>=80).length, fails=grades.filter(v=>v<50).length;
       const dnws=vis.filter(dnwOf).length;
       const title=[D.term,[D.subject,D.number].filter(Boolean).join(' ')].filter(Boolean).join(' ');
-      stats.textContent=`${title?title+' ':''}Grades — Mean/Std = ${Math.round(mu*10)/10} / ${Math.round(sd*10)/10} % · N = ${n} · ${as} A${as===1?'':'s'} · ${fails} Fail${fails===1?'':'s'}${dnws?` · ${dnws} DNW${dnws===1?'':'s'}`:''}`;
+      stats.textContent=`${title?title+' ':''}Grades — Mean/Std = ${Math.round(mu*10)/10} / ${Math.round(sd*10)/10} % · N = ${n} · ${as} A${as===1?'':"\u2019s"} · ${fails} Fail${fails===1?'':'s'}${dnws?` · ${dnws} DNW${dnws===1?'':'s'}`:''}`;
     }
   }
   const PAL=['#6fa8dc','#bda1cb','#93c47d','#e0a800','#76a5af','#c27ba0','#8e7cc3','#dd7e6b','#6aa84f','#a4c2f4','#f6b26b','#999999'];
