@@ -392,10 +392,14 @@ function colGrade(st,c,seen,skipOv){
     return Math.round(v*10)/10;
   }
   const raw=st.marks[c.id];
-  if(raw==null||raw==='') return null;
-  let v=applyScale(+raw,c.formula);
+  // a leaf with no mark but a code-referencing formula is a COMPUTED column
+  // (e.g. WAVG(T1,T2,T3,FE)) — evaluate it; only a plain mark column bails
+  const blank=raw==null||raw==='';
+  if(blank&&!(isExpr(c.formula)||codeRefs(c.formula))) return null;
+  let v=applyScale(blank?NaN:+raw,c.formula);
   if(isExpr(c.formula)||codeRefs(c.formula))
     v=evalExpr(v,c.formula,codeLookup(st,new Set([...(seen||[]),c.id])),codeWeight);
+  if(typeof v!=='number'||!isFinite(v)) return null;
   return Math.round(v*10)/10; }
 function totals(st){
   // the *** short code marks THE course-raw column: its grade IS the raw
