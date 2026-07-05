@@ -208,14 +208,24 @@ function load(){
 // for deleted columns drop — no more half-migrated weirdness
 function sanitize(d){
   if(!d||typeof d!=='object') return null;
-  d.subject=d.subject||''; d.number=d.number||''; d.section=d.section||''; d.term=d.term||'';
-  d.rawFormula=d.rawFormula||''; d.gradeFormula=d.gradeFormula||''; d.schemeNotes=d.schemeNotes||'';
+  d.subject=String(d.subject||''); d.number=String(d.number||''); d.section=String(d.section||''); d.term=String(d.term||'');
+  d.rawFormula=String(d.rawFormula||''); d.gradeFormula=String(d.gradeFormula||''); d.schemeNotes=String(d.schemeNotes||'');
   d.capRules=(Array.isArray(d.capRules)?d.capRules:[]).filter(r=>r&&typeof r==='object').map(r=>({cond:String(r.cond||''),to:isFinite(+r.to)?+r.to:null}));
   if(d.code&&!d.subject){ const m=/^(.*\S)\s+(\S+)$/.exec(d.code); d.subject=m?m[1]:d.code; d.number=m?m[2]:''; }
   delete d.code;
   d.cols=(Array.isArray(d.cols)?d.cols:[]).filter(c=>c&&c.id&&c.title!=null).map(c=>({
-    id:String(c.id), title:String(c.title), code:c.code||'', formula:c.formula||'',
-    weight:(c.weight==null||c.weight==='')?null:+c.weight, max:(+c.max>0)?+c.max:null, parent:c.parent||null}));
+    id:String(c.id), title:String(c.title), code:String(c.code??''), formula:String(c.formula??''),
+    weight:(c.weight==null||c.weight==='')?null:+c.weight, max:(+c.max>0)?+c.max:null,
+    parent:c.parent?String(c.parent):null}));
+  // col ids are interpolated into data-* attributes and querySelectors all
+  // over the render — a file-supplied id is an injection vector, so force
+  // every id into a safe alphabet and remap references (parent, marks, ov)
+  const remap={};
+  { const all=new Set(d.cols.map(c=>c.id)); let n=0;
+    d.cols.forEach(c=>{ if(!/^[A-Za-z0-9_-]+$/.test(c.id)){
+      let nid; do{ nid='q'+(++n); }while(all.has(nid)); all.add(nid);
+      remap[c.id]=nid; c.id=nid; } }); }
+  d.cols.forEach(c=>{ if(c.parent!=null&&remap[c.parent]!=null) c.parent=remap[c.parent]; });
   const ids=new Set(d.cols.map(c=>c.id));
   fillCodes(d.cols);                                      // every component gets a handle
   d.cols.forEach(c=>{ if(c.parent&&(!ids.has(c.parent)||c.parent===c.id)) c.parent=null; });
@@ -224,11 +234,25 @@ function sanitize(d){
     while(x&&x.parent){ if(seen.has(x.parent)){ c.parent=null; break; }
       seen.add(x.parent); x=d.cols.find(y=>y.id===x.parent); } });
   d.students=(Array.isArray(d.students)?d.students:[]).filter(st=>st&&typeof st==='object').map(st=>{
-    const out={snum:st.snum||'', first:st.first||'', last:st.last||'', section:st.section||'',
-      marks:Object.fromEntries(Object.entries(st.marks||{}).filter(([k,v])=>ids.has(k)&&v!=null&&v!==''))};
-    const ov=Object.fromEntries(Object.entries(st.ov||{}).filter(([k,o])=>o&&(
-      (k==='__total__'&&o.type==='set'&&isFinite(+o.value))||
-      (ids.has(k)&&((o.type==='exempt')||(o.type==='set'&&isFinite(+o.value))||(o.type==='moveto'&&ids.has(o.to)))))));
+    // marks become NUMBERS here (file strings could otherwise reach a value=""
+    // attribute raw); overrides are rebuilt field by field, types pinned
+    const out={snum:String(st.snum||''), first:String(st.first||''), last:String(st.last||''), section:String(st.section||''),
+      marks:Object.fromEntries(Object.entries(st.marks||{})
+        .map(([k,v])=>[remap[k]??k,v])
+        .filter(([k,v])=>ids.has(k)&&v!=null&&v!==''&&isFinite(+v))
+        .map(([k,v])=>[k,+v]))};
+    const ov={};
+    for(let [k,o] of Object.entries(st.ov||{})){
+      k=remap[k]??k;
+      if(!o||typeof o!=='object') continue;
+      const reason=String(o.reason??''), to=o.to==null?null:String(remap[o.to]??o.to);
+      if(k==='__total__'){ if(o.type==='set'&&isFinite(+o.value)) ov[k]={type:'set',value:+o.value,reason}; }
+      else if(ids.has(k)){
+        if(o.type==='exempt') ov[k]={type:'exempt',reason};
+        else if(o.type==='set'&&isFinite(+o.value)) ov[k]={type:'set',value:+o.value,reason};
+        else if(o.type==='moveto'&&to!=null&&ids.has(to)) ov[k]={type:'moveto',to,reason};
+      }
+    }
     if(Object.keys(ov).length) out.ov=ov;
     return out; });
   return d;
@@ -542,8 +566,8 @@ function render(){
       <td><input data-ccode="${c.id}" value="${esc(c.code||'')}" placeholder="—" style="text-align:center"></td>
       <td style="padding-left:${8+depth*24}px"><span style="display:flex;align-items:center"><input data-ctitle="${c.id}" value="${esc(c.title)}" style="flex:1;width:auto">${tri}</span></td>
       <td><input class="${fmClass(c.formula)}" data-cform="${c.id}" value="${esc(c.formula||'')}" placeholder="—" title="${esc(fmTitle(c.formula, parent?'folds the indented children: DROP(LOWEST[,n]) · DROP(HIGHEST[,n]) · SUM · MAX · MIN · then SCALE(n)/expressions':"SCALE(10) · if(this>89,100) · clamp(this,0,100) · other columns' codes"))}"></td>
-      <td class="statcol"><input data-cmax="${c.id}" value="${c.max??''}" inputmode="decimal" placeholder="100" title="max grade — what this column is out of; half of it draws the fail line" style="width:100%;text-align:center;border:none;background:transparent;font:inherit;color:inherit"></td>
-      <td class="pctcol"><input class="wpct" data-cw="${c.id}" value="${c.weight??''}" inputmode="decimal" placeholder="${child?'eq':''}" title="${child?'share WITHIN '+esc((D.cols.find(x=>x.id===c.parent)||{}).title||'the parent')+' — blank = equal weighting (the default); the parent\'s formula can change how they combine':'% of course grade'}">%</td>
+      <td class="statcol"><input data-cmax="${c.id}" value="${esc(c.max??'')}" inputmode="decimal" placeholder="100" title="max grade — what this column is out of; half of it draws the fail line" style="width:100%;text-align:center;border:none;background:transparent;font:inherit;color:inherit"></td>
+      <td class="pctcol"><input class="wpct" data-cw="${c.id}" value="${esc(c.weight??'')}" inputmode="decimal" placeholder="${child?'eq':''}" title="${child?'share WITHIN '+esc((D.cols.find(x=>x.id===c.parent)||{}).title||'the parent')+' — blank = equal weighting (the default); the parent\'s formula can change how they combine':'% of course grade'}">%</td>
       ${statCells(compStats(c))}
       <td class="xcol"><button class="x" data-delcol="${c.id}" title="remove ${esc(c.title)}${parent?' (its children become top-level)':' and its marks'}">×</button></td></tr>`; };
   // the OVERRIDES ledger: one row per change, worded like you'd say it
@@ -576,7 +600,7 @@ function render(){
       const nhit=r?D.students.filter(st=>{ const t=totals(st); return t&&t.capsHit.includes(r); }).length:0;
       return `<tr><td class="gripcol"></td><td class="ctl"></td><td></td>
       <td class="note" style="white-space:nowrap">GRADE CAP RULE${ri===0?' <button id="capadd" class="plus" title="add a cap rule">+</button>':''}</td>
-      <td>${r?`<span class="note">if</span> <input class="${fmClass('if('+(r.cond||'this')+',1,0)')}" data-capcond="${ri}" value="${esc(r.cond||'')}" placeholder="e.g. WAVG(T1,T2,T3,FIN)<50" title="${esc(fmTitle('if('+(r.cond||'this')+',1,0)','a condition over codes — matching students show an orange Raw and are capped'))}" style="width:46%"> <span class="note" style="font-size:10px;white-space:nowrap">→ max course grade</span> <input data-capto="${ri}" value="${r.to??''}" inputmode="decimal" style="width:40px">${isFinite(+r.to)&&r.to!=null&&r.to!==''?` <span class="note" style="font-size:10px">(${letterOf(+r.to)})</span>`:''}`
+      <td>${r?`<span class="note">if</span> <input class="${fmClass('if('+(r.cond||'this')+',1,0)')}" data-capcond="${ri}" value="${esc(r.cond||'')}" placeholder="e.g. WAVG(T1,T2,T3,FIN)<50" title="${esc(fmTitle('if('+(r.cond||'this')+',1,0)','a condition over codes — matching students show an orange Raw and are capped'))}" style="width:46%"> <span class="note" style="font-size:10px;white-space:nowrap">→ max course grade</span> <input data-capto="${ri}" value="${esc(r.to??'')}" inputmode="decimal" style="width:40px">${isFinite(+r.to)&&r.to!=null&&r.to!==''?` <span class="note" style="font-size:10px">(${letterOf(+r.to)})</span>`:''}`
       :'<span class="note">policy hurdles — e.g. if HW&lt;40, the grade is at most 45</span>'}</td>
       <td class="statcol"></td>
       <td class="pctcol note" title="students this rule caps">${r?(nhit?`${nhit} \u0394`:''):''}</td>
@@ -830,9 +854,13 @@ function applyScheme(sch){
   for(const sc of sch.cols){
     let c=(sc.code&&D.cols.find(x=>!used.has(x.id)&&(x.code||'').toLowerCase()===String(sc.code).toLowerCase()))
          ||D.cols.find(x=>!used.has(x.id)&&norm(x.title)===norm(sc.title));
-    if(!c){ c={id:uid(),title:sc.title,code:'',formula:'',weight:null,parent:null}; D.cols.push(c); }
+    if(!c){ c={id:uid(),title:String(sc.title??''),code:'',formula:'',weight:null,parent:null}; D.cols.push(c); }
     used.add(c.id); idMap[sc.id]=c.id;
-    c.title=sc.title; c.code=sc.code||''; c.formula=sc.formula||''; c.weight=sc.weight??null; c.max=(+sc.max>0)?+sc.max:null;
+    // scheme JSON bypasses sanitize(), so pin the types HERE: text stays
+    // string (esc'd at render), weight/max stay numeric-or-null
+    c.title=String(sc.title??''); c.code=String(sc.code??''); c.formula=String(sc.formula??'');
+    c.weight=(sc.weight==null||sc.weight===''||!isFinite(+sc.weight))?null:+sc.weight;
+    c.max=(+sc.max>0)?+sc.max:null;
   }
   for(const sc of sch.cols){ const c=D.cols.find(x=>x.id===idMap[sc.id]);
     c.parent=sc.parent!=null?(idMap[sc.parent]||null):null;
@@ -843,14 +871,17 @@ function applyScheme(sch){
   fillCodes(D.cols);   // scheme lines may omit codes — every component gets
                        // its generated handle NOW, so formulas like +or(TB,0)
                        // and the exception lines below can resolve
-  D.rawFormula=sch.rawFormula||''; D.gradeFormula=sch.gradeFormula||'';
-  if(sch.notes!=null) D.schemeNotes=sch.notes;
-  if(Array.isArray(sch.capRules)) D.capRules=sch.capRules.map(r=>({cond:r.cond||'',to:r.to??null}));
+  D.rawFormula=String(sch.rawFormula||''); D.gradeFormula=String(sch.gradeFormula||'');
+  if(sch.notes!=null) D.schemeNotes=String(sch.notes);
+  if(Array.isArray(sch.capRules)) D.capRules=sch.capRules.filter(r=>r&&typeof r==='object')
+    .map(r=>({cond:String(r.cond||''),to:isFinite(+r.to)?+r.to:null}));
   if(Array.isArray(sch.exceptions)&&sch.exceptions.length){
     const byCode=w=>D.cols.find(x=>(x.code||'').toLowerCase()===w.toLowerCase())
                   ||D.cols.find(x=>x.title.toLowerCase()===w.toLowerCase());
     let missed=0;
-    for(const ex of sch.exceptions){
+    for(const ex0 of sch.exceptions){
+      if(!ex0||typeof ex0!=='object'){ missed++; continue; }
+      const ex={who:String(ex0.who??''),what:String(ex0.what??''),reason:String(ex0.reason??'')};
       const st=D.students.find(s=>(s.snum||'').trim()===ex.who)
              ||D.students.find(s=>nameOf(s).toLowerCase()===ex.who.toLowerCase());
       if(!st){ missed++; continue; }
@@ -976,6 +1007,10 @@ function zipStore(files){                     // [{name, data:Uint8Array}]
   return out;
 }
 const xesc=t=>String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+// OWASP formula-injection guard: text cells starting with = + - @ (or a tab/
+// CR) can be re-evaluated as formulas by spreadsheet tooling — prefix a
+// quote. Numbers ship on the t="n" branch and digit-leading ids never match.
+const fmlsafe=t=>{ t=String(t??''); return /^[=+\-@\t\r]/.test(t)?"'"+t:t; };
 // a default short code from a title: initials (Learning Logs 3 -> LL3),
 // uniquified against the codes already taken
 function genCode(title,taken){
@@ -995,7 +1030,7 @@ function xlsxOf(rows){                        // rows: arrays of strings/numbers
   const body=rows.map((r,ri)=>`<row r="${ri+1}">`+r.map((v,ci)=>
     (typeof v==='number'&&isFinite(v))
       ?`<c r="${colL(ci)}${ri+1}" t="n"><v>${v}</v></c>`
-      :`<c r="${colL(ci)}${ri+1}" t="inlineStr"><is><t xml:space="preserve">${xesc(v??'')}</t></is></c>`
+      :`<c r="${colL(ci)}${ri+1}" t="inlineStr"><is><t xml:space="preserve">${xesc(fmlsafe(v))}</t></is></c>`
   ).join('')+'</row>').join('');
   const enc=new TextEncoder();
   const files=[
@@ -1068,10 +1103,10 @@ function openOverride(colId,si){
   const wrap=document.createElement('div'); wrap.id='ovpop';
   wrap.innerHTML=`<div class="ovcard">
     <div style="display:flex;justify-content:space-between"><b>${esc(c.title)} · ${esc(nameOf(st)||st.snum)}</b><a href="#" class="link" id="ovx">cancel</a></div>
-    ${leaf?`<label>Mark <input type="text" id="ovmark" value="${st.marks[colId]??''}" placeholder="blank = not graded" style="width:110px"></label><hr style="border:none;border-top:1px solid var(--shade)">`:''}
+    ${leaf?`<label>Mark <input type="text" id="ovmark" value="${esc(st.marks[colId]??'')}" placeholder="blank = not graded" style="width:110px"></label><hr style="border:none;border-top:1px solid var(--shade)">`:''}
     <label><input type="radio" name="ovact" value="none"${!ov.type?' checked':''}> No override</label>
     ${isTotal?'':`<label><input type="radio" name="ovact" value="exempt"${ov.type==='exempt'?' checked':''}> Exempt — weight moves to the remaining components</label>`}
-    <label><input type="radio" name="ovact" value="set"${ov.type==='set'?' checked':''}> Replace the grade with <input type="text" id="ovval" value="${ov.type==='set'?ov.value:''}" placeholder="%" style="width:70px"></label>
+    <label><input type="radio" name="ovact" value="set"${ov.type==='set'?' checked':''}> Replace the grade with <input type="text" id="ovval" value="${esc(ov.type==='set'?ov.value:'')}" placeholder="%" style="width:70px"></label>
     ${isTotal?'':`<label><input type="radio" name="ovact" value="moveto"${ov.type==='moveto'?' checked':''}> Move weight to <select id="ovto">${others.map(o=>`<option value="${o.id}"${ov.to===o.id?' selected':''}>${esc(o.code?o.code+' — ':'')}${esc(o.title)}</option>`).join('')}</select></label>`}
     <label>Reason <input type="text" id="ovreason" value="${esc(ov.reason||'')}" placeholder="REQUIRED for any override"></label>
     <p><button id="ovapply">Apply</button></p></div>`;
