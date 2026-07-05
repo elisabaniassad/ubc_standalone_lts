@@ -251,7 +251,7 @@ function applyBoost(v,f){ const m=/\+\s*boost\s*(?:\(\s*(\d+(?:\.\d+)?)\s*\))?/i
 /* tiny safe expression evaluator: numbers, this, SHORT CODES (via lookup),
    + - * / ( ), if(cond,then[,else]), clamp(x,a,b), min/max(a,b), comparisons
    inside if. No eval(). */
-function evalExpr(value,src,lookup){
+function evalExpr(value,src,lookup,wlookup){
   if(!src) return value;
   src=src.replace(/^\s*=/,'');          // spreadsheet fingers: "=TG" means TG
   if(/^\s*\+/.test(src)) src='this'+src;   // "+TB" means "this + TB"
@@ -260,13 +260,28 @@ function evalExpr(value,src,lookup){
   function primary(){ ws();
     if(s[i]==='('){ i++; const v=cmp(); ws(); if(s[i]===')') i++; return v; }
     if(s[i]==='-'){ i++; return -primary(); }
-    const fn=/^(if|clamp|min|max|round|roundup|rounddown|orzero|or|n0)\s*\(/i.exec(s.slice(i));
+    const fn=/^(if|clamp|min|max|round|roundup|rounddown|orzero|or|n0|wavg|avg)\s*\(/i.exec(s.slice(i));
+    if(fn&&fn[1].toLowerCase()==='wavg'){
+      // WAVG(T1,T2,FIN): codes only — each weighted by its component's course
+      // weight; blank references drop out (with their weight)
+      i+=fn[0].length; let sv=0,sw=0;
+      for(;;){ ws();
+        const w=/^[A-Za-z_][A-Za-z0-9_]*/.exec(s.slice(i)); if(!w) break;
+        i+=w[0].length;
+        const v=lookup?lookup(w[0]):null, wt=wlookup?wlookup(w[0]):1;
+        if(v!=null&&isFinite(v)){ sv+=v*wt; sw+=wt; }
+        ws(); if(s[i]===','){ i++; continue; } break;
+      }
+      if(s[i]===')') i++;
+      return sw?sv/sw:NaN;
+    }
     if(fn){ i+=fn[0].length; const args=[cmp()]; ws();
       while(s[i]===','){ i++; args.push(cmp()); ws(); }
       if(s[i]===')') i++;
       const f=fn[1].toLowerCase();
       if(f==='n0'||f==='orzero') return isFinite(args[0])?args[0]:0;   // orzero(TB) = TB, or 0 when blank
       if(f==='or'){ for(const a of args) if(typeof a==='number'&&isFinite(a)) return a; return NaN; }   // or(TB,0): first value that exists
+      if(f==='avg'){ const xs=args.filter(a=>typeof a==='number'&&isFinite(a)); return xs.length?xs.reduce((a,b)=>a+b,0)/xs.length:NaN; }
       if(f==='if') return (args[0]&&args[0]!==0&&args[0]!==false)?(args[1]??value):(args[2]??value);
       if(f==='clamp') return Math.min(args[2]??100,Math.max(args[1]??0,args[0]));
       // min/max IGNORE blanks (a blank reference is absent, not zero) —
@@ -332,7 +347,7 @@ function aggregate(xs,f){
   if(!W) return list.reduce((a,x)=>a+x.g,0)/(list.length||1);   // all-zero shares: plain mean
   return list.reduce((a,x)=>a+x.g*(+x.w),0)/W;
 }
-const FKEYWORDS=new Set(['this','if','clamp','min','max','round','roundup','rounddown','scale','boost','bump','keep','lowest','highest','sum','drop','avg','n0','orzero','or']);
+const FKEYWORDS=new Set(['this','if','clamp','min','max','round','roundup','rounddown','scale','boost','bump','keep','lowest','highest','sum','drop','avg','n0','orzero','or','wavg']);
 function codeRefs(f){ const ids=(f||'').match(/[A-Za-z_][A-Za-z0-9_]*/g)||[];
   return ids.some(w=>!FKEYWORDS.has(w.toLowerCase())&&D.cols.some(c=>(c.code||'').toLowerCase()===w.toLowerCase())); }
 // names that are neither keywords nor any column's short code: a formula
@@ -347,6 +362,9 @@ function codeLookup(st,seen){ return name=>{
   const cc=D.cols.find(x=>(x.code||'').toLowerCase()===name.toLowerCase());
   if(!cc||(seen&&seen.has(cc.id))) return null;
   return colGrade(st,cc,new Set([...(seen||[])])); }; }
+function codeWeight(name){
+  const cc=D.cols.find(x=>(x.code||'').toLowerCase()===name.toLowerCase());
+  return cc?((cc.weight==null||cc.weight==='')?1:+cc.weight):1; }
 function colGrade(st,c,seen,skipOv){
   const ov=!skipOv&&st.ov&&st.ov[c.id];
   if(ov){
@@ -365,14 +383,14 @@ function colGrade(st,c,seen,skipOv){
     let v=aggregate(xs,c.formula);
     v=applyScale(v,c.formula);
     if(isExpr(c.formula)||codeRefs(c.formula))
-      v=evalExpr(v,c.formula,codeLookup(st,new Set([...(seen||[]),c.id])));
+      v=evalExpr(v,c.formula,codeLookup(st,new Set([...(seen||[]),c.id])),codeWeight);
     return Math.round(v*10)/10;
   }
   const raw=st.marks[c.id];
   if(raw==null||raw==='') return null;
   let v=applyScale(+raw,c.formula);
   if(isExpr(c.formula)||codeRefs(c.formula))
-    v=evalExpr(v,c.formula,codeLookup(st,new Set([...(seen||[]),c.id])));
+    v=evalExpr(v,c.formula,codeLookup(st,new Set([...(seen||[]),c.id])),codeWeight);
   return Math.round(v*10)/10; }
 function totals(st){
   // the *** short code marks THE course-raw column: its grade IS the raw
@@ -388,7 +406,7 @@ function totals(st){
   if(rf&&(isExpr(rf)||codeRefs(rf))){
     // the raw formula can BE the value (converter mode: "TG", no weights);
     // NaN in = NaN out for students whose referenced column is blank
-    const r=evalExpr(base==null?NaN:base, rf, codeLookup(st));
+    const r=evalExpr(base==null?NaN:base, rf, codeLookup(st), codeWeight);
     raw=(typeof r==='number'&&isFinite(r))?r:null;
   }
   if(raw==null) return null;
@@ -414,7 +432,7 @@ function totals(st){
         if(m2&&g===+m2[1]){ g=+m2[2]; boosted=true; break; }
       }
       const b=applyBoost(g,stg); if(b.boosted) boosted=true; g=b.v;
-    } else if(isExpr(stg)||codeRefs(stg)) g=evalExpr(g,stg,codeLookup(st));
+    } else if(isExpr(stg)||codeRefs(stg)) g=evalExpr(g,stg,codeLookup(st),codeWeight);
   }
   if(!rounded) g=Math.round(g);
   // the course-total override (the discretionary caps): final word, with reason
