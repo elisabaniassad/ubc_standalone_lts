@@ -910,7 +910,7 @@ function schemeOf(){
           capRules:(D.capRules||[]).map(r=>({cond:r.cond||'',to:r.to??null}))};
 }
 function schemeText(){
-  const L=['# gradebook scheme — indent = hierarchy; fields: code | title | formula | weight% | max'];
+  const L=['# gradebook scheme — fields: code | title | formula | weight% | max | parent   (parent is a code; blank = top-level)'];
   if(D.rawFormula) L.push('raw: '+D.rawFormula);
   if(D.gradeFormula) L.push('grade: '+D.gradeFormula);
   if(D.boostFormula) L.push('boost: '+D.boostFormula);
@@ -927,12 +927,12 @@ function schemeText(){
     if(what) L.push('exception: '+who+' | '+what+(ov.reason?' | '+ov.reason:''));
   }}
   L.push('');
-  const walk=(parent,depth)=>{ for(const c of D.cols.filter(x=>(x.parent||null)===parent)){
-    const f=[c.code||'',c.title||'',c.formula||'',c.weight!=null?c.weight+'%':'',c.max!=null?'max '+c.max:''];
+  const codeOf=id=>{ const c=D.cols.find(x=>x.id===id); return c?(c.code||''):''; };
+  for(const c of D.cols){
+    const f=[c.code||'',c.title||'',c.formula||'',c.weight!=null?c.weight+'%':'',c.max!=null?'max '+c.max:'',c.parent?codeOf(c.parent):''];
     while(f.length&&!f[f.length-1]) f.pop();
-    L.push('  '.repeat(depth)+f.join(' | '));
-    walk(c.id,depth+1); } };
-  walk(null,0);
+    L.push(f.join(' | '));
+  }
   return L.join('\n')+'\n';
 }
 function parseSchemeText(txt){
@@ -952,16 +952,19 @@ function parseSchemeText(txt){
             if(seg.length>=2) sch.exceptions.push({who:seg[0],what:seg[1].replace(/\u2192/g,'->'),reason:seg[2]||''}); }
       continue; }
     const depth=Math.round(/^[ \t]*/.exec(line)[0].replace(/\t/g,'  ').length/2);
-    const [code='',title='',formula='',wRaw='',mRaw='']=line.trim().split('|').map(x=>x.trim());
+    const [code='',title='',formula='',wRaw='',mRaw='',pRaw='']=line.trim().split('|').map(x=>x.trim());
     if(!code&&!title) continue;
     const w=wRaw?parseFloat(wRaw.replace('%','')):NaN;
     const mm=/([\d.]+)/.exec(mRaw||'');
     while(stack.length&&stack[stack.length-1].depth>=depth) stack.pop();
     const id='s'+(++n);
     sch.cols.push({id,title:title||code,code,formula,weight:isFinite(w)?w:null,
-                   max:mm&&+mm[1]>0?+mm[1]:null,parent:stack.length?stack[stack.length-1].id:null});
+                   max:mm&&+mm[1]>0?+mm[1]:null,parent:stack.length?stack[stack.length-1].id:null,_pc:pRaw});
     stack.push({depth,id});
   }
+  // the 'parent' column (a code) is authoritative; indentation is a legacy fallback
+  const byCode={}; sch.cols.forEach(c=>{ if(c.code) byCode[c.code.toLowerCase()]=c.id; });
+  sch.cols.forEach(c=>{ if(c._pc) c.parent=byCode[c._pc.toLowerCase()]||null; delete c._pc; });
   if(!sch.cols.length) throw new Error('no components found');
   return sch;
 }
