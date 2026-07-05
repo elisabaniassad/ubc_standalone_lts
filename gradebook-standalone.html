@@ -31,6 +31,7 @@
            padding:4px 8px; text-align:center; font-weight:400; }
   .setup input { border:1px solid var(--line); padding:4px 8px; }
   .bar { display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+  .setup.bar { align-items:flex-start; }   /* the AP hint makes that label taller — keep the boxes aligned at the top */
   .schemehead { display:flex; align-items:center; gap:8px; flex-wrap:wrap; border-bottom:1px solid var(--line); margin:22px 0 8px; padding-bottom:6px; }
   .schemehead h2 { border:none; margin:0; padding:0; }
   .bar input[type=search] { flex:1; max-width:780px; padding:5px 8px; border:1px solid var(--line); }
@@ -228,7 +229,7 @@ function gradesCSV(){                       // marks only — re-importable with
 }
 let D=load()||{subject:'',number:'',section:'',term:'',cols:[],students:[],rawFormula:'',gradeFormula:'',boostFormula:''};
 if(D.code&&!D.subject){ const m=/^(.*\S)\s+(\S+)$/.exec(D.code); D.subject=m?m[1]:D.code; D.number=m?m[2]:''; delete D.code; }
-let SERIES=null, FILTER='', BUCKET='LETTER', SORT=null, STUCOL=false; const COLL=new Set();
+let SERIES=null, FILTER='', BUCKET='LETTER', SORT=null, STUCOL=false; const COLL=new Set(); let COLORMAP={};
 function load(){
   try{
     const x=JSON.parse(localStorage.getItem(KEY));
@@ -653,6 +654,8 @@ function render(){
     DISP.push({c:n,computed:true});
     if(!COLL.has(n.id)) nk.forEach(walk);
   });
+  COLORMAP={}; DISP.forEach((d,i)=>{ COLORMAP[d.c.id]=PAL[i%PAL.length]; });
+  COLORMAP.__raw__='#999'; COLORMAP.__total__='#444';
   const csep=i=>i===0?' class="gsep"':'';
   const sub=(name,cell,course)=>`<tr class="sub">${lbl(name)}${DISP.map((d,i)=>`<td${csep(i)}>${cell(d.c,i)}</td>`).join('')}${course}</tr>`;
   // ── the calculation table (the Lifeboat layout): components, codes,
@@ -893,7 +896,7 @@ function refresh(){
     }
   }
   const PAL=['#6fa8dc','#bda1cb','#93c47d','#e0a800','#76a5af','#c27ba0','#8e7cc3','#dd7e6b','#6aa84f','#a4c2f4','#f6b26b','#999999'];
-  const series=[...D.cols.map((c,i)=>({id:c.id,label:c.title,color:PAL[i%PAL.length]})),{id:'__raw__',label:'Raw',color:'#999'},{id:'__total__',label:'Grade',color:'#444'}].filter(x=>SERIES.has(x.id));
+  const series=[...D.cols.map(c=>({id:c.id,label:c.title,color:COLORMAP[c.id]||'#999'})),{id:'__raw__',label:'Raw',color:'#999'},{id:'__total__',label:'Grade',color:'#444'}].filter(x=>SERIES.has(x.id));
   /* (chart series ids unchanged — parents chart their folded value) */
   // with a filter on, the chart keeps the WHOLE cohort as context and picks
   // out the matching students' share of each bar in gold
