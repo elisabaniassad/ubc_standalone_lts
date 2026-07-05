@@ -132,7 +132,7 @@ Formulas: <code>SCALE(10)</code>, <code>if(this&gt;89,100)</code>, <code>clamp(t
 Type <code>***</code> as a column's short code or formula to make it THE course <b>Raw</b> column: it auto-names the column (e.g. Tentative Grade → <code>TG</code>) and writes that name into the Raw formula for you.<br>
 Grade formula (optional — nothing is applied unless you type it): <code>ROUND()+BOOST</code> (boost lifts a grade sitting within N of a UBC boundary), <code>ROUNDUP</code>/<code>ROUNDDOWN</code>, <code>SCALE(n)</code>, <code>+BOOST(2)</code>. The Grade column always reports whole numbers.<br>
 Parent folds: <code>DROP(LOWEST[,n])</code>/<code>DROP(HIGHEST[,n])</code> · <code>KEEP(HW5)</code> protects members from the drop · <code>SUM</code>/<code>MAX</code>/<code>MIN</code>.
-Grade formula extras: <code>BUMP(89-&gt;90,79-&gt;80)</code> boosts those exact values only; <code>orzero(TB)</code> reads a code as 0 when that student's cell is blank (bonus columns) — e.g. raw formula <code>this+orzero(TB)</code>.<br>
+Grade formula extras: <code>BUMP(89-&gt;90,79-&gt;80)</code> boosts those exact values only; <code>or(TB,0)</code> takes the first value that exists (so blank TB falls back to 0; <code>orzero(TB)</code> is shorthand) — e.g. raw formula <code>+or(TB,0)</code>.<br>
 A <b>Final Exam</b> column scoring exactly 0 flags <b>DNW</b>.</p>
 
 <h2 style="display:flex;align-items:center">Overall grade calculation<span style="flex:1"></span><button id="schdl" style="font-weight:400;text-transform:none;letter-spacing:0" title="save the SCHEME (structure, codes, formulas, weights — no students, no marks) as a file">Download scheme</button><button id="schload" style="font-weight:400;text-transform:none;letter-spacing:0;margin-left:8px" title="load a scheme file: components match your existing columns by title/code; marks are kept">Load scheme</button></h2>
@@ -230,12 +230,13 @@ function evalExpr(value,src,lookup){
   function primary(){ ws();
     if(s[i]==='('){ i++; const v=cmp(); ws(); if(s[i]===')') i++; return v; }
     if(s[i]==='-'){ i++; return -primary(); }
-    const fn=/^(if|clamp|min|max|round|roundup|rounddown|orzero|n0)\s*\(/i.exec(s.slice(i));
+    const fn=/^(if|clamp|min|max|round|roundup|rounddown|orzero|or|n0)\s*\(/i.exec(s.slice(i));
     if(fn){ i+=fn[0].length; const args=[cmp()]; ws();
       while(s[i]===','){ i++; args.push(cmp()); ws(); }
       if(s[i]===')') i++;
       const f=fn[1].toLowerCase();
       if(f==='n0'||f==='orzero') return isFinite(args[0])?args[0]:0;   // orzero(TB) = TB, or 0 when blank
+      if(f==='or'){ for(const a of args) if(typeof a==='number'&&isFinite(a)) return a; return NaN; }   // or(TB,0): first value that exists
       if(f==='if') return (args[0]&&args[0]!==0&&args[0]!==false)?(args[1]??value):(args[2]??value);
       if(f==='clamp') return Math.min(args[2]??100,Math.max(args[1]??0,args[0]));
       if(f==='min') return Math.min(...args);
@@ -299,7 +300,7 @@ function aggregate(xs,f){
   if(!W) return list.reduce((a,x)=>a+x.g,0)/(list.length||1);   // all-zero shares: plain mean
   return list.reduce((a,x)=>a+x.g*(+x.w),0)/W;
 }
-const FKEYWORDS=new Set(['this','if','clamp','min','max','round','roundup','rounddown','scale','boost','bump','keep','lowest','highest','sum','drop','avg','n0','orzero']);
+const FKEYWORDS=new Set(['this','if','clamp','min','max','round','roundup','rounddown','scale','boost','bump','keep','lowest','highest','sum','drop','avg','n0','orzero','or']);
 function codeRefs(f){ const ids=(f||'').match(/[A-Za-z_][A-Za-z0-9_]*/g)||[];
   return ids.some(w=>!FKEYWORDS.has(w.toLowerCase())&&D.cols.some(c=>(c.code||'').toLowerCase()===w.toLowerCase())); }
 // names that are neither keywords nor any column's short code: a formula
