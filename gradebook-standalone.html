@@ -664,6 +664,11 @@ function render(){
       <td class="pctcol${sumOk?'':' err'}" title="sum of the component weights — should reach 100">${Math.round(wsum*10)/10}%</td>
       ${statCells(statsOf(D.students.map(st=>{ const t=totals(st); return t?t.raw:null; })))}
       <td class="xcol"></td></tr>
+    <tr><td class="gripcol"></td><td class="ctl"></td><td></td><td class="statcol"></td><td class="note">boost/bumps/rounds</td>
+      <td><input class="${fmClass(D.boostFormula)}" data-boostform value="${esc(D.boostFormula||'')}" placeholder="e.g. round up, bump 80->81, boost" title="${esc(fmTitle(D.boostFormula,'rounding, bumps & boosts — round up/down · bump 80->81 · boost (to the next letter)'))}"></td>
+      <td class="pctcol note" style="border:none" title="students bumped or boosted">${(()=>{const n=D.students.filter(st=>{const t=totals(st);return t&&(t.bumped||t.boosted);}).length;return n?`${n} Δ`:'';})()}</td>
+      ${statCells(statsOf(D.students.map(st=>{ const t=totals(st); return t?t.gBoost:null; })))}
+      <td class="xcol"></td></tr>
     ${((D.capRules||[]).length?D.capRules:[{cond:'',to:''}]).map((r,ri)=>{
       const nhit=(r&&r.cond)?D.students.filter(st=>{ const t=totals(st); return t&&t.capsHit.includes(r); }).length:0;
       return `<tr><td class="gripcol"></td><td class="ctl"></td><td></td>
@@ -671,16 +676,13 @@ function render(){
       <td class="note" style="white-space:nowrap">GRADE CAP RULE${ri===0?' <button id="capadd" class="plus" title="add a cap rule">+</button>':''}</td>
       <td>${r?`<span class="note">if</span> <input class="${fmClass('if('+(r.cond||'this')+',1,0)')}" data-capcond="${ri}" value="${esc(r.cond||'')}" placeholder="e.g. WAVG(T1,T2,T3,FIN)<50" title="${esc(fmTitle('if('+(r.cond||'this')+',1,0)','a condition over codes — matching students show an orange Raw and are capped'))}" style="width:46%"> <span class="note" style="font-size:10px;white-space:nowrap">→ max course grade</span> <input data-capto="${ri}" value="${esc(r.to??'')}" inputmode="decimal" style="width:40px">${isFinite(+r.to)&&r.to!=null&&r.to!==''?` <span class="note" style="font-size:10px">(${letterOf(+r.to)})</span>`:''}`:''}</td>
       <td class="pctcol note" style="border:none" title="students this rule caps">${r?(nhit?`${nhit} Δ`:''):''}</td>
-      <td class="statcol"></td><td class="statcol"></td><td class="statcol"></td><td class="statcol"></td>
+      ${statCells(statsOf(D.students.map(st=>{ const t=totals(st); return t?t.grade:null; })))}
       <td class="xcol">${(D.capRules&&D.capRules[ri])?`<button class="x" data-capdel="${ri}" title="remove this cap rule">×</button>`:''}</td></tr>`; }).join('')}
-    <tr><td class="gripcol"></td><td class="ctl"></td><td></td><td class="statcol"></td><td class="note">boost/bumps/rounds</td>
-      <td colspan="2"><input class="${fmClass(D.boostFormula)}" data-boostform value="${esc(D.boostFormula||'')}" placeholder="e.g. round up, bump 80->81, boost" title="${esc(fmTitle(D.boostFormula,'rounding, bumps & boosts — round up/down · bump 80->81 · boost (to the next letter)'))}"></td>
-      <td class="statcol"></td><td class="statcol"></td><td class="statcol"></td><td class="statcol"></td>
-      <td class="xcol"></td></tr>
     <tr><td class="gripcol"></td><td class="ctl"></td><td></td><td class="statcol"></td><td>COURSE GRADE</td>
       <td colspan="2"><input class="${fmClass(D.gradeFormula)}" data-gradeform value="${esc(D.gradeFormula||'')}" placeholder="—" title="${esc(fmTitle(D.gradeFormula,'Grade formula (optional) — e.g. ROUND()+BOOST'))}"></td>
       ${statCells(statsOf(D.students.map(st=>{ const t=totals(st); return t?t.grade:null; })))}
-      <td class="xcol"></td></tr></table>`;
+      <td class="xcol"></td></tr>
+    </table>`;
   document.getElementById('ovmount').innerHTML=ovTable;
   const selRow=sub('In chart',(c,i)=>`<span class="gbck${SERIES.has(c.id)?' on':''}" data-ck="${c.id}"><span class="dot" style="background:${color(i)}"></span></span>`,
     `<td class="gsep gbck${SERIES.has('__raw__')?' on':''}" data-ck="__raw__"><span class="dot" style="background:#999"></span></td><td class="gbck${SERIES.has('__total__')?' on':''}" data-ck="__total__"><span class="dot" style="background:#444"></span></td><td></td><td></td>`);
