@@ -476,9 +476,10 @@ function render(){
   const ovRows=[];
   D.students.forEach((st,si)=>{ for(const [colId,ov] of Object.entries(st.ov||{})){
     const c=D.cols.find(x=>x.id===colId); if(!c) continue;
-    const change=ov.type==='exempt'?`Exempt ${c.title}`
-      :ov.type==='set'?`Set ${c.title} = ${ov.value}`
-      :`${c.title} → ${(x=>x?(x.code||x.title):'?')(D.cols.find(x=>x.id===ov.to))}`;
+    const orig=colGrade(st,c,null,true);
+    const change=ov.type==='exempt'?`${c.title}: ${orig??'—'} → exempt`
+      :ov.type==='set'?`${c.title}: ${orig??'—'} → ${ov.value}`
+      :`${c.title}: weight → ${(x=>x?(x.code||x.title):'?')(D.cols.find(x=>x.id===ov.to))}`;
     ovRows.push(`<tr data-ovcol="${colId}" data-ovsi="${si}" title="click to edit"><td>${esc(st.snum||nameOf(st)||'?')}</td><td>${esc(change)}</td><td>${esc(ov.reason||'')}</td></tr>`);
   }});
   const ovTable=`<h3>Overrides</h3><table class="ovtable"><tr><th class="sid">Student ID</th><th>Change</th><th>Reason</th></tr>
