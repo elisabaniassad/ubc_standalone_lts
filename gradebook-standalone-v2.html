@@ -474,8 +474,10 @@ function splitStages(src){
   return out.map(x=>x.trim()).filter(Boolean);
 }
 function dnwOf(st){
-  return D.cols.some(c=>/final\s*exam/i.test(c.title)&&!D.cols.some(x=>x.parent===c.id)
-    &&st.marks[c.id]!=null&&st.marks[c.id]!==''&&+st.marks[c.id]===0); }
+  // the first column titled like the final exam — a meta-column fold or a
+  // plain mark column both work, because we ask for its VALUE, not its mark
+  const fin=D.cols.find(c=>/final\s*exam/i.test(c.title));
+  return !!fin&&colGrade(st,fin)===0; }
 
 /* ════ render ════ */
 function collapseAll(){ for(const c of D.cols) if(D.cols.some(x=>x.parent===c.id)) COLL.add(c.id); }
