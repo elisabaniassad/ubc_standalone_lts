@@ -52,6 +52,8 @@
   .gtog { display:inline-block; min-width:1em; }
   #gbtable input.mark { width:56px; border:none; font:inherit; background:transparent; text-align:center; }
   th.sortable { cursor:pointer; }
+  #gbtable th.gcat.togglable { cursor:pointer; }
+  .gtog { display:inline-block; min-width:1em; }
   .gbck { cursor:pointer; }
   .dot { display:inline-block; width:12px; height:12px; border:1px solid var(--line); opacity:.25; }
   .gbck.on .dot { opacity:1; }
@@ -194,6 +196,7 @@ function sanitize(d){
     id:String(c.id), title:String(c.title), code:c.code||'', formula:c.formula||'',
     weight:(c.weight==null||c.weight==='')?null:+c.weight, parent:c.parent||null}));
   const ids=new Set(d.cols.map(c=>c.id));
+  fillCodes(d.cols);                                      // every component gets a handle
   d.cols.forEach(c=>{ if(c.parent&&(!ids.has(c.parent)||c.parent===c.id)) c.parent=null; });
   d.cols.forEach(c=>{                                    // any depth; break CYCLES only
     const seen=new Set([c.id]); let x=c;
@@ -478,11 +481,19 @@ function render(){
     `<td class="gsep"><span data-avg="__raw__"></span></td><td><span data-avg="__total__"></span></td><td></td><td></td>`);
   const histRow=sub('Histogram',c=>`<span data-hist="${c.id}"></span>`,
     `<td class="gsep"></td><td><span data-hist="__total__"></span></td><td></td><td></td>`);
-  let sup=`<tr><th class="gcat togglable" data-stutog colspan="${rosterN}"><span class="gtog">${STUCOL?'+':'−'}</span> Students</th><th class="gcat" colspan="${Math.max(1,DISP.length)}">Assessments</th><th class="gcat gsep" colspan="4">Course Grade</th></tr>`;
+  const tops=D.cols.filter(c=>!c.parent);
+  const groupThs=tops.map(t=>{
+    const span=DISP.filter(d=>d.c.id===t.id||inSubtree(t.id,d.c)).length;
+    if(!span) return '';
+    const hasKids=kidsOf(t.id).length>0;
+    const tog=hasKids?`<span class="gtog">${COLL.has(t.id)?'+':'−'}</span> `:'';
+    return `<th class="gcat${hasKids?' togglable':''}"${hasKids?` data-tog="${t.id}"`:''} colspan="${span}">${tog}${esc(t.title)}</th>`;
+  }).join('');
+  let sup=`<tr><th class="gcat togglable" data-stutog colspan="${rosterN}"><span class="gtog">${STUCOL?'+':'−'}</span> Students</th>${groupThs||`<th class="gcat">—</th>`}<th class="gcat gsep" colspan="4">Course Grade</th></tr>`;
   let subh=`<tr class="subhead">`+(STUCOL
     ?`<th class="sortable" data-sort="__name__">Name</th>`
     :`<th class="sortable" data-sort="__name__">Name</th><th class="sortable" data-sort="__snum__">Student #</th><th>Section</th><th></th>`)
-    +DISP.map((d,i)=>`<th class="sortable${i===0?' gsep':''}" data-sort="${d.c.id}">${esc(d.c.title)}${d.c.code?` <span class="note">[${esc(d.c.code)}]</span>`:''}</th>`).join('')
+    +DISP.map((d,i)=>`<th class="sortable${i===0?' gsep':''}" data-sort="${d.c.id}">${d.computed?`<button class="tri" data-tog="${d.c.id}" style="font-size:13px;padding:0 4px;margin-left:0">${COLL.has(d.c.id)?'▸':'▾'}</button>`:''}${esc(d.c.title)}${d.c.code?` <span class="note">[${esc(d.c.code)}]</span>`:''}</th>`).join('')
     +`<th class="gsep sortable" data-sort="__raw__">Raw</th><th class="sortable" data-sort="__total__">Grade</th><th>Letter</th><th>Note</th></tr>`;
   const body=D.students.map((st,si)=>{
     const tt=totals(st), dnw=dnwOf(st);
@@ -646,8 +657,9 @@ function importCSV(text){
   const gradeCols=head.map((h,i)=>({h,i})).filter(x=>!skip.has(x.i)&&x.h);
   for(const gc of gradeCols){
     if(!D.cols.some(c=>norm(c.title)===norm(gc.h)))
-      D.cols.push({id:uid(),title:gc.h,code:'',formula:'',weight:null});
+      D.cols.push({id:uid(),title:gc.h,code:'',formula:'',weight:null,parent:null});
   }
+  fillCodes(D.cols);
   let added=0,updated=0;
   for(const r of rows.slice(1)){
     const snum=(r[si]||'').trim(); if(!snum) continue;
@@ -708,6 +720,20 @@ function zipStore(files){                     // [{name, data:Uint8Array}]
   return out;
 }
 const xesc=t=>String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+// a default short code from a title: initials (Learning Logs 3 -> LL3),
+// uniquified against the codes already taken
+function genCode(title,taken){
+  let g=(String(title).match(/[A-Za-z0-9]+/g)||['C']).map(w=>/^\d+$/.test(w)?w:w[0]).join('').toUpperCase().slice(0,10);
+  if(g.replace(/\d/g,'').length<1) g='C'+g;
+  let out=g,n=1;
+  while(taken.has(out)) out=g+(++n);
+  taken.add(out);
+  return out;
+}
+function fillCodes(cols){
+  const taken=new Set(cols.map(c=>(c.code||'').toUpperCase()).filter(Boolean));
+  cols.forEach(c=>{ if(!c.code) c.code=genCode(c.title,taken); });
+}
 function xlsxOf(rows){                        // rows: arrays of strings/numbers
   const colL=i=>{ let n=i+1,r=''; while(n){ r=String.fromCharCode(64+((n-1)%26+1))+r; n=Math.floor((n-1)/26); } return r; };
   const body=rows.map((r,ri)=>`<row r="${ri+1}">`+r.map((v,ci)=>
@@ -910,6 +936,7 @@ document.addEventListener('click',e=>{
     save(); render(); return; }
   if(e.target.id==='addcol'){
     const c={id:uid(),title:'New component',code:'',formula:'',weight:null,parent:null};
+    fillCodes([...D.cols,c]);
     D.cols.unshift(c);                     // born at the TOP, right where the + lives
     save(); SERIES=null; render();
     const inp=document.querySelector(`input[data-ctitle="${c.id}"]`);
