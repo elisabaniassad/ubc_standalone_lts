@@ -119,6 +119,7 @@
   td.ovset { background:#ffe6c4; cursor:pointer; }
   td.ovin { background:#fff3e0; }      /* a fold containing an overridden grade */
   td.capd { background:#ffd9a8; }      /* grade pulled down by a cap rule: orange */
+  td.capsrc { background:#ffe4c2; }    /* the component that tripped the cap */
   td.bmp  { background:#e3f2df; }      /* grade lifted by a BUMP pair: pale green */
   td.bst  { background:#bfe3b8; }      /* grade lifted by BOOST: the darker green */
   td.ovex { background:#e4e7ea; color:var(--muted); cursor:pointer; }
@@ -611,6 +612,13 @@ function render(){
       if(fail) return ' class="fail"';
       if(tt.boosted) return ' class="boosted"';
       return ab?' class="atbound"':''; })();
+    const capSrc=new Set();
+    if(tt&&tt.capped) for(const r of tt.capsHit)
+      for(const w of (r.cond.match(/[A-Za-z_][A-Za-z0-9_]*/g)||[])){
+        if(FKEYWORDS.has(w.toLowerCase())) continue;
+        const cc=D.cols.find(c=>(c.code||'').toLowerCase()===w.toLowerCase());
+        if(cc) capSrc.add(cc.id);
+      }
     const gradeTint=!tt?'':tt.overridden?' ovset':tt.capped?' capd':tt.boosted?' bst':tt.bumped?' bmp':'';
     const gradeTitle=!tt?'':tt.overridden?(st.ov.__total__.reason||'')+' — click to edit'
       :tt.capped?`capped by rule: ${tt.capsHit.map(r=>`${r.cond} → at most ${r.to}`).join(' · ')} — click to override`
@@ -636,9 +644,9 @@ function render(){
         }
         if(d.computed){
           const ovIn=st.ov&&subtreeOf(d.c.id).some(k=>st.ov[k.id]);
-          return `<td class="computed gcell${ovIn?' ovin':''}${i===0?' gsep':''}${g!=null&&g<(+d.c.max>0?+d.c.max/2:50)?' fail':''}" data-ovcol="${d.c.id}" data-ovsi="${si}" title="${esc(d.c.title)} — folded from its indented components${ovIn?'; CONTAINS AN OVERRIDDEN GRADE':''}; click to override/exempt">${g??'—'}</td>`;
+          return `<td class="computed gcell${ovIn?' ovin':''}${i===0?' gsep':''}${g!=null&&g<(+d.c.max>0?+d.c.max/2:50)?' fail':''}${capSrc.has(d.c.id)?' capsrc':''}" data-ovcol="${d.c.id}" data-ovsi="${si}" title="${esc(d.c.title)} — folded from its indented components${ovIn?'; CONTAINS AN OVERRIDDEN GRADE':''}; click to override/exempt">${g??'—'}</td>`;
         }
-        return `<td class="gcell${i===0?' gsep':''}${g!=null&&g<(+d.c.max>0?+d.c.max/2:50)?' fail':''}" data-ovcol="${d.c.id}" data-ovsi="${si}" title="click to edit the mark or override it">${st.marks[d.c.id]??'—'}</td>`; }).join('')
+        return `<td class="gcell${i===0?' gsep':''}${g!=null&&g<(+d.c.max>0?+d.c.max/2:50)?' fail':''}${capSrc.has(d.c.id)?' capsrc':''}" data-ovcol="${d.c.id}" data-ovsi="${si}" title="click to edit the mark or override it">${st.marks[d.c.id]??'—'}</td>`; }).join('')
       +`<td class="gsep note${tt&&tt.capsHit&&tt.capsHit.length?' ovin':''}"${tt&&tt.capsHit&&tt.capsHit.length?` title="subject to a cap rule: ${esc(tt.capsHit.map(r=>`${r.cond} → at most ${r.to}`).join(' · '))}"`:''}>${tt?tt.raw:''}</td>
       <td class="gcell${gradeTint}"${!gradeTint&&tt?cls:''} data-ovcol="__total__" data-ovsi="${si}" title="${esc(gradeTitle)}">${tt?(tt.overridden?`${tt.grade} <span class="gbwas">(was ${tt.computed})</span>`:tt.grade):''}</td>
       <td${cls}>${tt?letterOf(tt.grade):''}</td><td>${dnw?'<span class="dnw">DNW</span>':''}</td></tr>`;
