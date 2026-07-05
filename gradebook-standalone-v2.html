@@ -100,6 +100,7 @@
   /* a component WITH children is a fold — it reads pale blue, like the
      grid's computed columns */
   table.scheme tr.parentrow td { background:#eaf3fa; }
+  input.badformula { background:#fde7e4 !important; }
   /* live sample columns: see the formulas WORK as you type them */
   table.scheme td.statcol, table.scheme th.statcol { width:54px; text-align:center; color:var(--muted); }
   table.scheme tr.dragover { outline:2px dashed var(--line); outline-offset:-2px; }
@@ -131,7 +132,7 @@ Formulas: <code>SCALE(10)</code>, <code>if(this&gt;89,100)</code>, <code>clamp(t
 Type <code>***</code> as a column's short code or formula to make it THE course <b>Raw</b> column: it auto-names the column (e.g. Tentative Grade → <code>TG</code>) and writes that name into the Raw formula for you.<br>
 Grade formula (optional — nothing is applied unless you type it): <code>ROUND()+BOOST</code> (boost lifts a grade sitting within N of a UBC boundary), <code>ROUNDUP</code>/<code>ROUNDDOWN</code>, <code>SCALE(n)</code>, <code>+BOOST(2)</code>. The Grade column always reports whole numbers.<br>
 Parent folds: <code>DROP(LOWEST[,n])</code>/<code>DROP(HIGHEST[,n])</code> · <code>KEEP(HW5)</code> protects members from the drop · <code>SUM</code>/<code>MAX</code>/<code>MIN</code>.
-Grade formula extras: <code>BUMP(89-&gt;90,79-&gt;80)</code> boosts those exact values only; <code>n0(TB)</code> reads a code as 0 when blank (bonus columns).<br>
+Grade formula extras: <code>BUMP(89-&gt;90,79-&gt;80)</code> boosts those exact values only; <code>orzero(TB)</code> reads a code as 0 when that student's cell is blank (bonus columns) — e.g. raw formula <code>this+orzero(TB)</code>.<br>
 A <b>Final Exam</b> column scoring exactly 0 flags <b>DNW</b>.</p>
 
 <h2 style="display:flex;align-items:center">Overall grade calculation<span style="flex:1"></span><button id="schdl" style="font-weight:400;text-transform:none;letter-spacing:0" title="save the SCHEME (structure, codes, formulas, weights — no students, no marks) as a file">Download scheme</button><button id="schload" style="font-weight:400;text-transform:none;letter-spacing:0;margin-left:8px" title="load a scheme file: components match your existing columns by title/code; marks are kept">Load scheme</button></h2>
@@ -228,12 +229,12 @@ function evalExpr(value,src,lookup){
   function primary(){ ws();
     if(s[i]==='('){ i++; const v=cmp(); ws(); if(s[i]===')') i++; return v; }
     if(s[i]==='-'){ i++; return -primary(); }
-    const fn=/^(if|clamp|min|max|round|roundup|rounddown|n0)\s*\(/i.exec(s.slice(i));
+    const fn=/^(if|clamp|min|max|round|roundup|rounddown|orzero|n0)\s*\(/i.exec(s.slice(i));
     if(fn){ i+=fn[0].length; const args=[cmp()]; ws();
       while(s[i]===','){ i++; args.push(cmp()); ws(); }
       if(s[i]===')') i++;
       const f=fn[1].toLowerCase();
-      if(f==='n0') return isFinite(args[0])?args[0]:0;     // blank-safe: n0(TB) = 0 when TB is empty
+      if(f==='n0'||f==='orzero') return isFinite(args[0])?args[0]:0;   // orzero(TB) = TB, or 0 when blank
       if(f==='if') return (args[0]&&args[0]!==0&&args[0]!==false)?(args[1]??value):(args[2]??value);
       if(f==='clamp') return Math.min(args[2]??100,Math.max(args[1]??0,args[0]));
       if(f==='min') return Math.min(...args);
@@ -297,9 +298,17 @@ function aggregate(xs,f){
   if(!W) return list.reduce((a,x)=>a+x.g,0)/(list.length||1);   // all-zero shares: plain mean
   return list.reduce((a,x)=>a+x.g*(+x.w),0)/W;
 }
+const FKEYWORDS=new Set(['this','if','clamp','min','max','round','roundup','rounddown','scale','boost','bump','keep','lowest','highest','sum','drop','avg','n0','orzero']);
 function codeRefs(f){ const ids=(f||'').match(/[A-Za-z_][A-Za-z0-9_]*/g)||[];
-  const K=new Set(['this','if','clamp','min','max','round','roundup','rounddown','scale','boost','bump','keep','lowest','highest','sum','drop','avg','n0']);
-  return ids.some(w=>!K.has(w.toLowerCase())&&D.cols.some(c=>(c.code||'').toLowerCase()===w.toLowerCase())); }
+  return ids.some(w=>!FKEYWORDS.has(w.toLowerCase())&&D.cols.some(c=>(c.code||'').toLowerCase()===w.toLowerCase())); }
+// names that are neither keywords nor any column's short code: a formula
+// containing one silently computes NOTHING — so we make it loud instead
+function unknownRefs(f){ const ids=(f||'').match(/[A-Za-z_][A-Za-z0-9_]*/g)||[];
+  return [...new Set(ids.filter(w=>!FKEYWORDS.has(w.toLowerCase())
+    &&!D.cols.some(c=>(c.code||'').toLowerCase()===w.toLowerCase())))]; }
+function fmClass(f){ return unknownRefs(f).length?' badformula':''; }
+function fmTitle(f,fb){ const u=unknownRefs(f);
+  return u.length?`unknown name${u.length>1?'s':''}: ${u.join(', ')} — not a keyword or any column's short code, so this formula does NOTHING`:fb; }
 function codeLookup(st,seen){ return name=>{
   const cc=D.cols.find(x=>(x.code||'').toLowerCase()===name.toLowerCase());
   if(!cc||(seen&&seen.has(cc.id))) return null;
@@ -418,7 +427,7 @@ function render(){
       <td class="ctl">${ind}</td>
       <td><input data-ccode="${c.id}" value="${esc(c.code||'')}" placeholder="—" style="text-align:center"></td>
       <td style="padding-left:${8+depth*24}px"><span style="display:flex;align-items:center"><input data-ctitle="${c.id}" value="${esc(c.title)}" style="flex:1;width:auto">${tri}</span></td>
-      <td><input data-cform="${c.id}" value="${esc(c.formula||'')}" placeholder="—" title="${parent?'folds the indented children: DROP(LOWEST[,n]) · DROP(HIGHEST[,n]) · SUM · MAX · MIN · then SCALE(n)/expressions':'SCALE(10) · if(this>89,100) · clamp(this,0,100) · other columns\' codes'}"></td>
+      <td><input class="${fmClass(c.formula)}" data-cform="${c.id}" value="${esc(c.formula||'')}" placeholder="—" title="${esc(fmTitle(c.formula, parent?'folds the indented children: DROP(LOWEST[,n]) · DROP(HIGHEST[,n]) · SUM · MAX · MIN · then SCALE(n)/expressions':"SCALE(10) · if(this>89,100) · clamp(this,0,100) · other columns' codes"))}"></td>
       <td class="pctcol"><input class="wpct" data-cw="${c.id}" value="${c.weight??''}" inputmode="decimal" placeholder="${child?'eq':''}" title="${child?'share WITHIN '+esc((D.cols.find(x=>x.id===c.parent)||{}).title||'the parent')+' — blank = equal weighting (the default); the parent\'s formula can change how they combine':'% of course grade'}">%</td>
       ${statCells(compStats(c))}
       <td class="xcol"><button class="x" data-delcol="${c.id}" title="remove ${esc(c.title)}${parent?' (its children become top-level)':' and its marks'}">×</button></td></tr>`; };
@@ -426,7 +435,7 @@ function render(){
     <tr><th class="gripcol"></th><th class="ctl"></th><th class="codecol">Code</th><th>Component <button id="addcol" class="plus" title="add a component">+</button></th><th class="formcol">Formula</th><th class="pctcol">%</th><th class="statcol">LOW</th><th class="statcol">HIGH</th><th class="statcol">MED</th><th class="statcol">AVG</th><th class="xcol"></th></tr>
     ${ordered.map(rowOf).join('')}
     <tr><td class="gripcol"></td><td class="ctl"></td><td></td><td>Course grade</td>
-      <td><input data-rawform value="${esc(D.rawFormula||'')}" placeholder="weighted sum" title="Raw formula" style="width:48%"><input data-gradeform value="${esc(D.gradeFormula||'')}" placeholder="—" title="Grade formula (optional) — e.g. ROUND()+BOOST" style="width:48%"></td>
+      <td><input class="${fmClass(D.rawFormula)}" data-rawform value="${esc(D.rawFormula||'')}" placeholder="weighted sum" title="${esc(fmTitle(D.rawFormula,'Raw formula — e.g. this+orzero(TB)'))}" style="width:48%"><input class="${fmClass(D.gradeFormula)}" data-gradeform value="${esc(D.gradeFormula||'')}" placeholder="—" title="${esc(fmTitle(D.gradeFormula,'Grade formula (optional) — e.g. ROUND()+BOOST'))}" style="width:48%"></td>
       <td class="pctcol"></td>
       ${statCells(statsOf(D.students.map(st=>{ const t=totals(st); return t?t.grade:null; })))}
       <td class="xcol"></td></tr>
