@@ -281,7 +281,7 @@ function save(){
   try{ sessionStorage.setItem(KEY, JSON.stringify({ts:Date.now(),d:D})); STORAGE_OK=true; }
   catch(e){ STORAGE_OK=false; }        // quota exceeded for this tab's session store
   const n=document.getElementById('storagenote');
-  if(n) n.innerHTML=STORAGE_OK?'':'<span class="err">This tab's storage is full, so changes are NOT auto-saved — use <b>SAVE GRADES</b> to keep your work, and <b>IMPORT GRADES</b> to bring it back.</span>';
+  if(n) n.innerHTML=STORAGE_OK?'':'<span class="err">This tab has run out of storage, so changes are NOT auto-saved — use <b>SAVE GRADES</b> to keep your work, and <b>IMPORT GRADES</b> to bring it back.</span>';
 }
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uid=()=>'c'+(D.cols.reduce((a,c)=>Math.max(a,+c.id.slice(1)||0),0)+1);
