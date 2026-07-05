@@ -148,7 +148,7 @@
   <input type="file" id="csvfile" accept=".csv" style="display:none">
   <button id="importbtn" title="CSV: Student #, First, Last, Section (optional), then one column per assessment">Import CSV</button>
   <input type="file" id="jsonfile" accept=".json" style="display:none">
-  <input type="file" id="schfile" accept=".json" style="display:none">
+  <input type="file" id="schfile" accept=".txt,.scheme,.json" style="display:none">
   <button id="dl" title="save everything (students, marks, formulas) as a file — works even when browser storage is full">Download data</button>
   <button id="loadbtn" title="load a previously downloaded data file">Load data</button>
   <button id="wipe" title="erase everything stored in this browser">start over</button>
@@ -473,8 +473,9 @@ function splitStages(src){
   out.push(cur);
   return out.map(x=>x.trim()).filter(Boolean);
 }
-function dnwOf(st){ const fin=D.cols.find(c=>/final\s*exam/i.test(c.title));
-  return !!(fin&&+st.marks[fin.id]===0&&st.marks[fin.id]!==''&&st.marks[fin.id]!=null); }
+function dnwOf(st){
+  return D.cols.some(c=>/final\s*exam/i.test(c.title)&&!D.cols.some(x=>x.parent===c.id)
+    &&st.marks[c.id]!=null&&st.marks[c.id]!==''&&+st.marks[c.id]===0); }
 
 /* ════ render ════ */
 function collapseAll(){ for(const c of D.cols) if(D.cols.some(x=>x.parent===c.id)) COLL.add(c.id); }
@@ -741,6 +742,48 @@ function schemeOf(){
   return {schemeVersion:1, cols:D.cols.map(c=>({id:c.id,title:c.title,code:c.code||'',formula:c.formula||'',weight:c.weight??null,max:c.max??null,parent:c.parent||null})),
           rawFormula:D.rawFormula||'', gradeFormula:D.gradeFormula||'', notes:D.schemeNotes||'',
           capRules:(D.capRules||[]).map(r=>({cond:r.cond||'',to:r.to??null}))};
+}
+function schemeText(){
+  const L=['# gradebook scheme — indent = hierarchy; fields: code | title | formula | weight% | max'];
+  if(D.rawFormula) L.push('raw: '+D.rawFormula);
+  if(D.gradeFormula) L.push('grade: '+D.gradeFormula);
+  for(const r of (D.capRules||[])) if(r.cond) L.push('cap: '+r.cond+' -> '+(r.to??''));
+  if(D.schemeNotes) L.push('notes: '+D.schemeNotes);
+  L.push('');
+  const walk=(parent,depth)=>{ for(const c of D.cols.filter(x=>(x.parent||null)===parent)){
+    const f=[c.code||'',c.title||'',c.formula||'',c.weight!=null?c.weight+'%':'',c.max!=null?'max '+c.max:''];
+    while(f.length&&!f[f.length-1]) f.pop();
+    L.push('  '.repeat(depth)+f.join(' | '));
+    walk(c.id,depth+1); } };
+  walk(null,0);
+  return L.join('\n')+'\n';
+}
+function parseSchemeText(txt){
+  const sch={schemeVersion:1,cols:[],rawFormula:'',gradeFormula:'',notes:'',capRules:[]};
+  const stack=[]; let n=0;
+  for(const line of txt.split(/\r?\n/)){
+    if(!line.trim()||/^\s*#/.test(line)) continue;
+    const dm=/^(raw|grade|notes|cap)\s*:\s*(.*)$/i.exec(line.trim());
+    if(dm){ const k=dm[1].toLowerCase(), v=dm[2].trim();
+      if(k==='raw') sch.rawFormula=v;
+      else if(k==='grade') sch.gradeFormula=v;
+      else if(k==='notes') sch.notes=v;
+      else{ const cm=/^(.*?)(?:->|\u2192)\s*(-?[\d.]+)\s*$/.exec(v);
+            if(cm) sch.capRules.push({cond:cm[1].trim(),to:+cm[2]}); }
+      continue; }
+    const depth=Math.round(/^[ \t]*/.exec(line)[0].replace(/\t/g,'  ').length/2);
+    const [code='',title='',formula='',wRaw='',mRaw='']=line.trim().split('|').map(x=>x.trim());
+    if(!code&&!title) continue;
+    const w=wRaw?parseFloat(wRaw.replace('%','')):NaN;
+    const mm=/([\d.]+)/.exec(mRaw||'');
+    while(stack.length&&stack[stack.length-1].depth>=depth) stack.pop();
+    const id='s'+(++n);
+    sch.cols.push({id,title:title||code,code,formula,weight:isFinite(w)?w:null,
+                   max:mm&&+mm[1]>0?+mm[1]:null,parent:stack.length?stack[stack.length-1].id:null});
+    stack.push({depth,id});
+  }
+  if(!sch.cols.length) throw new Error('no components found');
+  return sch;
 }
 function applyScheme(sch){
   if(!sch||!Array.isArray(sch.cols)) throw new Error('not a scheme file');
@@ -1042,7 +1085,8 @@ document.getElementById('schfile').addEventListener('change',e=>{
   const f=e.target.files[0]; if(!f) return;
   const r=new FileReader();
   r.onerror=()=>alert('Could not read that file.');
-  r.onload=()=>{ try{ applyScheme(JSON.parse(r.result)); save(); SERIES=null; render(); }
+  r.onload=()=>{ try{ const t=String(r.result);
+      applyScheme(t.trim().startsWith('{')?JSON.parse(t):parseSchemeText(t)); save(); SERIES=null; render(); }
     catch(err){ alert('Scheme load failed: '+err.message); } };
   r.readAsText(f); e.target.value='';
 });
@@ -1110,8 +1154,8 @@ document.addEventListener('click',e=>{
   if(e.target.id==='addstu'){ D.students.push({snum:'',first:'',last:'',section:'',marks:{}}); save(); render(); return; }
   if(e.target.id==='importbtn'){ document.getElementById('csvfile').click(); return; }
   if(e.target.id==='schdl'){ const a=document.createElement('a');
-    a.href=URL.createObjectURL(new Blob([JSON.stringify(schemeOf(),null,1)],{type:'application/json'}));
-    a.download=(((D.subject||'')+(D.number||''))||'course')+'.scheme.json';
+    a.href=URL.createObjectURL(new Blob([schemeText()],{type:'text/plain'}));
+    a.download=(((D.subject||'')+(D.number||''))||'course')+'.scheme.txt';
     a.click(); URL.revokeObjectURL(a.href); return; }
   if(e.target.id==='schload'){ document.getElementById('schfile').click(); return; }
   if(e.target.id==='dl'){ const a=document.createElement('a');
