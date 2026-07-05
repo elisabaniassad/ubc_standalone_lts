@@ -178,6 +178,7 @@
   <b>Parent fold</b> — <code>DROP(LOWEST[,n])</code> / <code>DROP(HIGHEST[,n])</code> · <code>KEEP(a)</code> shields a code from the drop · <code>SUM</code> · <code>MAX</code> · <code>MIN</code> · <code>WAVG(a,b,…)</code> mean weighted by each code's %<br>
   <b>Grade</b> (stages, comma-separated) — <code>ROUND()</code> · <code>ROUNDUP</code> / <code>ROUNDDOWN</code> · <code>BOOST(n)</code> lift to a letter boundary within n · <code>BUMP(a-&gt;b, …)</code> remap exact values<br>
   <b>Missing values</b> — <code>or(a, b)</code> first that exists · <code>orzero(a)</code> = <code>or(a, 0)</code><br>
+  <b>Move weight</b> — <code>if(this&lt;50, moveto(a))</code> hands this component's weight to code <code>a</code> when the test holds (e.g. a failed midterm onto the final)<br>
   <b>Course Raw</b> — <code>***</code> as a code or formula marks the course Raw column · <b>Cap rule</b> — a condition over codes → a maximum grade
 </div>
 
@@ -300,7 +301,7 @@ function applyBoost(v,f){ const m=/\+\s*boost\s*(?:\(\s*(\d+(?:\.\d+)?)\s*\))?/i
 /* tiny safe expression evaluator: numbers, this, SHORT CODES (via lookup),
    + - * / ( ), if(cond,then[,else]), clamp(x,a,b), min/max(a,b), comparisons
    inside if. No eval(). */
-function evalExpr(value,src,lookup,wlookup){
+function evalExpr(value,src,lookup,wlookup,wantMove){
   if(!src) return value;
   src=src.replace(/^\s*=/,'');          // spreadsheet fingers: "=TG" means TG
   if(/^\s*\+/.test(src)) src='this'+src;   // "+TB" means "this + TB"
@@ -309,6 +310,12 @@ function evalExpr(value,src,lookup,wlookup){
   function primary(){ ws();
     if(s[i]==='('){ i++; const v=cmp(); ws(); if(s[i]===')') i++; return v; }
     if(s[i]==='-'){ i++; return -primary(); }
+    // moveto(CODE): a directive, not a number — move THIS component's weight
+    // to CODE (used inside an if, e.g. if(this<50, moveto(FE))). Returns a
+    // sentinel; transparent to the numeric value (the grade still shows)
+    const mv=/^moveto\s*\(/i.exec(s.slice(i));
+    if(mv){ i+=mv[0].length; ws(); const w=/^[A-Za-z_][A-Za-z0-9_]*/.exec(s.slice(i));
+      let nm=''; if(w){ nm=w[0]; i+=w[0].length; } ws(); if(s[i]===')') i++; return {__moveto:nm}; }
     const fn=/^(if|clamp|min|max|round|roundup|rounddown|orzero|or|n0|wavg|avg)\s*\(/i.exec(s.slice(i));
     if(fn&&fn[1].toLowerCase()==='wavg'){
       // WAVG(T1,T2,FIN): codes only — each weighted by its component's course
@@ -360,7 +367,20 @@ function evalExpr(value,src,lookup,wlookup){
       v=m[0]==='<'?v<r:m[0]==='>'?v>r:m[0]==='<='?v<=r:m[0]==='>='?v>=r:v===r; }
     return v; }
   const out=cmp();
+  if(out&&typeof out==='object'&&out.__moveto) return wantMove?out:value;   // moveto is transparent to the value
   return (typeof out==='number'&&isFinite(out))?Math.round(out*10)/10:value;
+}
+// the weight-move target for a component whose formula fires moveto(CODE)
+// for this student (else null) — top-level only; used by totals()
+function movetoTarget(st,c){
+  if(!/moveto\s*\(/i.test(c.formula||'')) return null;
+  const v=colGrade(st,c);
+  const r=evalExpr(v==null?NaN:v, c.formula, codeLookup(st), codeWeight, true);
+  if(r&&typeof r==='object'&&r.__moveto){
+    const t=D.cols.find(x=>(x.code||'').toLowerCase()===String(r.__moveto).toLowerCase());
+    return t?t.id:null;
+  }
+  return null;
 }
 function isExpr(f){ return /this|if\s*\(|clamp\s*\(/i.test(f||''); }
 const kidsOf=id=>D.cols.filter(x=>x.parent===id);
@@ -396,7 +416,7 @@ function aggregate(xs,f){
   if(!W) return list.reduce((a,x)=>a+x.g,0)/(list.length||1);   // all-zero shares: plain mean
   return list.reduce((a,x)=>a+x.g*(+x.w),0)/W;
 }
-const FKEYWORDS=new Set(['this','if','clamp','min','max','round','roundup','rounddown','scale','boost','bump','keep','lowest','highest','sum','drop','avg','n0','orzero','or','wavg']);
+const FKEYWORDS=new Set(['this','if','clamp','min','max','round','roundup','rounddown','scale','boost','bump','keep','lowest','highest','sum','drop','avg','n0','orzero','or','wavg','moveto']);
 function codeRefs(f){ const ids=(f||'').match(/[A-Za-z_][A-Za-z0-9_]*/g)||[];
   return ids.some(w=>!FKEYWORDS.has(w.toLowerCase())&&D.cols.some(c=>(c.code||'').toLowerCase()===w.toLowerCase())); }
 // names that are neither keywords nor any column's short code: a formula
@@ -449,9 +469,16 @@ function totals(st){
   // the *** short code marks THE course-raw column: its grade IS the raw
   // value, no weights or formulas needed (the converter's one-liner)
   const star=D.cols.find(c=>(c.code||'').trim()==='***');
+  // moveto pass: a component whose formula fires moveto(CODE) for this student
+  // drops out and hands its course-weight to CODE (e.g. a failed midterm's
+  // weight rolling onto the final)
+  const moved={}, skip=new Set();
+  for(const c of D.cols){ if(c.parent) continue;
+    const tgt=movetoTarget(st,c);
+    if(tgt){ skip.add(c.id); moved[tgt]=(moved[tgt]||0)+(+c.weight||0); } }
   let t=0,w=0;
-  for(const c of D.cols){ if(c.parent) continue;   // children feed their parent
-    const g=colGrade(st,c), wt=+c.weight||0;
+  for(const c of D.cols){ if(c.parent||skip.has(c.id)) continue;   // children feed their parent
+    const g=colGrade(st,c), wt=(+c.weight||0)+(moved[c.id]||0);
     if(g!=null&&wt>0){ t+=g*wt; w+=wt; } }
   const base=star?colGrade(st,star):(w?t/w:null);
   const rf=D.rawFormula||'';
