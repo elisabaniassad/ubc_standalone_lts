@@ -834,6 +834,9 @@ function applyScheme(sch){
   const ordered=sch.cols.map(sc=>D.cols.find(x=>x.id===idMap[sc.id]));
   D.cols=[...ordered, ...D.cols.filter(x=>!ordered.includes(x))];
   collapseAll();
+  fillCodes(D.cols);   // scheme lines may omit codes — every component gets
+                       // its generated handle NOW, so formulas like +or(TB,0)
+                       // and the exception lines below can resolve
   D.rawFormula=sch.rawFormula||''; D.gradeFormula=sch.gradeFormula||'';
   if(sch.notes!=null) D.schemeNotes=sch.notes;
   if(Array.isArray(sch.capRules)) D.capRules=sch.capRules.map(r=>({cond:r.cond||'',to:r.to??null}));
