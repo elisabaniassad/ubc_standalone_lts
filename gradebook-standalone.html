@@ -1242,18 +1242,30 @@ function openOverride(colId,si){
   const ov=(st.ov&&st.ov[colId])||{};
   const leaf=!isTotal&&!kidsOf(colId).length;
   const others=D.cols.filter(x=>x.id!==colId);
+  // the AUDIT TRAIL — like a bank statement for this value: where it started,
+  // every rule that moved it, and (for an override) why
   let impactNote='';
   if(isTotal){ const t=totals(st);
-    if(t){ const fx=[`Computed: raw ${t.raw} → grade ${t.computed}`];
-      if(t.bumped) fx.push(`bumped by boost/bumps/rounds “${esc(D.boostFormula)}”`);
-      if(t.boosted) fx.push(`boosted by boost/bumps/rounds “${esc(D.boostFormula)}”`);
-      for(const r of (t.capsHit||[])) fx.push(`capped by “${esc(r.cond)}” → at most ${r.to}`);
-      impactNote=fx.join('<br>');
+    if(t){ const steps=[`Raw (weighted sum): <b>${t.raw}</b>`];
+      if(t.gBoost!==Math.round(t.raw)||t.bumped||t.boosted) steps.push(`→ <b>${t.gBoost}</b> &nbsp;via boost/bumps/rounds “${esc(D.boostFormula||'round')}”`);
+      else if(t.gBoost!==t.raw) steps.push(`→ <b>${t.gBoost}</b> &nbsp;(rounded)`);
+      for(const r of (t.capsHit||[])) steps.push(`→ capped by “${esc(r.cond)}” → at most ${r.to}`);
+      steps.push(`= grade: <b>${t.computed}</b>`);
+      if(st.ov&&st.ov.__total__) steps.push(`⇒ overridden to <b>${t.grade}</b> — ${esc(st.ov.__total__.reason||'')}`);
+      impactNote=steps.join('<br>');
     } }
+  else { const raw=st.marks[colId], val=colGrade(st,c,null,true), steps=[];
+    if(leaf){ steps.push(`Mark: <b>${(raw!=null&&raw!=='')?esc(String(raw)):'—'}</b>`);
+      if((c.formula||'').trim()&&val!=raw) steps.push(`→ <b>${val??'—'}</b> &nbsp;via formula “${esc(c.formula)}”`);
+    } else steps.push(`Folded from ${kidsOf(colId).length} components: <b>${val??'—'}</b>${(c.formula||'').trim()?` &nbsp;(“${esc(c.formula)}”)`:''}`);
+    const o=st.ov&&st.ov[colId];
+    if(o) steps.push(`⇒ overridden: ${o.type==='exempt'?'exempted (weight renormalised)':o.type==='set'?`set to ${o.value}`:o.type==='formula'?`formula “${esc(o.value)}”`:'weight moved'} — ${esc(o.reason||'')}`);
+    impactNote=steps.join('<br>');
+  }
   const wrap=document.createElement('div'); wrap.id='ovpop';
   wrap.innerHTML=`<div class="ovcard">
     <div style="display:flex;justify-content:space-between"><b>${esc(c.title)} · ${esc(nameOf(st)||st.snum)}</b><a href="#" class="link" id="ovx">cancel</a></div>
-    ${impactNote?`<div class="note" style="font-size:11px;border:1px solid var(--shade);padding:6px 8px;margin:6px 0;line-height:1.5">${impactNote}</div>`:''}
+    ${impactNote?`<div class="note" style="font-size:11px;border:1px solid var(--shade);padding:6px 8px;margin:6px 0;line-height:1.6"><b style="text-transform:uppercase;letter-spacing:.04em;font-size:10px">Audit trail</b><br>${impactNote}</div>`:''}
 
     <label><input type="radio" name="ovact" value="none"${!ov.type?' checked':''}> No override</label>
     ${isTotal?'':`<label><input type="radio" name="ovact" value="exempt"${ov.type==='exempt'?' checked':''}> Exempt — weight moves to the remaining components</label>`}
