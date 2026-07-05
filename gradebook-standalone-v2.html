@@ -217,8 +217,9 @@ function sanitize(d){
   d.students=(Array.isArray(d.students)?d.students:[]).filter(st=>st&&typeof st==='object').map(st=>{
     const out={snum:st.snum||'', first:st.first||'', last:st.last||'', section:st.section||'',
       marks:Object.fromEntries(Object.entries(st.marks||{}).filter(([k,v])=>ids.has(k)&&v!=null&&v!==''))};
-    const ov=Object.fromEntries(Object.entries(st.ov||{}).filter(([k,o])=>ids.has(k)&&o&&(
-      (o.type==='exempt')||(o.type==='set'&&isFinite(+o.value))||(o.type==='moveto'&&ids.has(o.to)))));
+    const ov=Object.fromEntries(Object.entries(st.ov||{}).filter(([k,o])=>o&&(
+      (k==='__total__'&&o.type==='set'&&isFinite(+o.value))||
+      (ids.has(k)&&((o.type==='exempt')||(o.type==='set'&&isFinite(+o.value))||(o.type==='moveto'&&ids.has(o.to)))))));
     if(Object.keys(ov).length) out.ov=ov;
     return out; });
   return d;
@@ -394,19 +395,32 @@ function totals(st){
   raw=applyScale(raw,rf);
   raw=Math.round(raw*10)/10;
   let g=raw;
-  const gf=D.gradeFormula||'';
-  g=applyScale(g,gf);
-  if(isExpr(gf)||codeRefs(gf)) g=evalExpr(g,gf,codeLookup(st));
-  if(/rounddown/i.test(gf)) g=Math.floor(g); else if(/roundup/i.test(gf)) g=Math.ceil(g); else g=Math.round(g);
-  let bumped=false;
-  const bm=/bump\s*\(([^)]*)\)/i.exec(gf);
-  if(bm) for(const pr of bm[1].split(',')){
-    const m2=/(-?\d+(?:\.\d+)?)\s*->\s*(-?\d+(?:\.\d+)?)/.exec(pr);
-    if(m2&&g===+m2[1]){ g=+m2[2]; bumped=true; break; }
+  // STAGES: 'ROUND()+BUMP(89->90); if(HW<40,45)' — semicolons separate stages,
+  // applied left to right; a stage is token ops (SCALE/ROUND/BUMP/BOOST) or an
+  // expression over this + codes (the hurdle if()s come after the rounding)
+  const stages=(D.gradeFormula||'').split(';').map(x=>x.trim()).filter(Boolean);
+  let rounded=false, boosted=false;
+  const tokenOnly=x=>x.replace(/scale\s*\([^)]*\)/ig,'').replace(/bump\s*\([^)]*\)/ig,'')
+    .replace(/\+?\s*boost\s*(\([^)]*\))?/ig,'').replace(/round(up|down)?\s*(\(\s*\))?/ig,'').replace(/[+\s]/g,'')==='';
+  for(const stg of stages){
+    if(tokenOnly(stg)){
+      g=applyScale(g,stg);
+      if(/rounddown/i.test(stg)){ g=Math.floor(g); rounded=true; }
+      else if(/roundup/i.test(stg)){ g=Math.ceil(g); rounded=true; }
+      else if(/round/i.test(stg)){ g=Math.round(g); rounded=true; }
+      const bm=/bump\s*\(([^)]*)\)/i.exec(stg);
+      if(bm) for(const pr of bm[1].split(',')){
+        const m2=/(-?\d+(?:\.\d+)?)\s*->\s*(-?\d+(?:\.\d+)?)/.exec(pr);
+        if(m2&&g===+m2[1]){ g=+m2[2]; boosted=true; break; }
+      }
+      const b=applyBoost(g,stg); if(b.boosted) boosted=true; g=b.v;
+    } else if(isExpr(stg)||codeRefs(stg)) g=evalExpr(g,stg,codeLookup(st));
   }
-  const b=applyBoost(g,gf);
-  if(bumped) b.boosted=true;
-  return {raw,grade:b.v,boosted:b.boosted}; }
+  if(!rounded) g=Math.round(g);
+  // the course-total override (the discretionary caps): final word, with reason
+  const tov=st.ov&&st.ov.__total__;
+  const grade=tov?Math.round(+tov.value):g;
+  return {raw,grade,boosted:boosted&&!tov,overridden:!!tov,computed:g}; }
 function dnwOf(st){ const fin=D.cols.find(c=>/final\s*exam/i.test(c.title));
   return !!(fin&&+st.marks[fin.id]===0&&st.marks[fin.id]!==''&&st.marks[fin.id]!=null); }
 
@@ -475,6 +489,11 @@ function render(){
   // the OVERRIDES ledger: one row per change, worded like you'd say it
   const ovRows=[];
   D.students.forEach((st,si)=>{ for(const [colId,ov] of Object.entries(st.ov||{})){
+    if(colId==='__total__'){
+      const t=totals(st);
+      ovRows.push(`<tr data-ovcol="__total__" data-ovsi="${si}" title="click to edit"><td>${esc(st.snum||nameOf(st)||'?')}</td><td>${esc(`Course grade: ${t?t.computed:'—'} → ${ov.value}`)}</td><td>${esc(ov.reason||'')}</td></tr>`);
+      continue;
+    }
     const c=D.cols.find(x=>x.id===colId); if(!c) continue;
     const orig=colGrade(st,c,null,true);
     const change=ov.type==='exempt'?`${c.title}: ${orig??'—'} → exempt`
@@ -550,7 +569,9 @@ function render(){
           return `<td class="computed gcell${ovIn?' ovin':''}${i===0?' gsep':''}${g!=null&&g<50?' fail':''}" data-ovcol="${d.c.id}" data-ovsi="${si}" title="${esc(d.c.title)} — folded from its indented components${ovIn?'; CONTAINS AN OVERRIDDEN GRADE':''}; click to override/exempt">${g??'—'}</td>`;
         }
         return `<td class="gcell${i===0?' gsep':''}${g!=null&&g<50?' fail':''}" data-ovcol="${d.c.id}" data-ovsi="${si}" title="click to edit the mark or override it">${st.marks[d.c.id]??'—'}</td>`; }).join('')
-      +`<td class="gsep note">${tt?tt.raw:''}</td><td${cls}>${tt?tt.grade:''}</td><td${cls}>${tt?letterOf(tt.grade):''}</td><td>${dnw?'<span class="dnw">DNW</span>':''}</td></tr>`;
+      +`<td class="gsep note">${tt?tt.raw:''}</td>
+      <td class="gcell${tt&&tt.overridden?' ovset':''}"${tt&&!tt.overridden?cls:''} data-ovcol="__total__" data-ovsi="${si}" title="${tt&&tt.overridden?esc((st.ov.__total__.reason||''))+' — click to edit':'click to set this student\u2019s course grade (the discretionary cap/fail — reason required)'}">${tt?(tt.overridden?`${tt.grade} <span class="gbwas">(was ${tt.computed})</span>`:tt.grade):''}</td>
+      <td${cls}>${tt?letterOf(tt.grade):''}</td><td>${dnw?'<span class="dnw">DNW</span>':''}</td></tr>`;
   }).join('');
   document.getElementById('grid').innerHTML=D.cols.length||D.students.length
     ?`<table id="gbtable"><thead>${selRow}${avgRow}${histRow}${sup}${subh}</thead><tbody>${body}</tbody></table>`
@@ -835,24 +856,25 @@ document.getElementById('filter').addEventListener('input',e=>{ FILTER=e.target.
 //    total by adjusting its components). ──
 function openOverride(colId,si){
   document.getElementById('ovpop')?.remove();
-  const c=D.cols.find(x=>x.id===colId), st=D.students[si]; if(!c||!st) return;
+  const isTotal=colId==='__total__';
+  const c=isTotal?{title:'Course grade'}:D.cols.find(x=>x.id===colId), st=D.students[si]; if(!c||!st) return;
   const ov=(st.ov&&st.ov[colId])||{};
-  const leaf=!kidsOf(colId).length;
+  const leaf=!isTotal&&!kidsOf(colId).length;
   const others=D.cols.filter(x=>x.id!==colId);
   const wrap=document.createElement('div'); wrap.id='ovpop';
   wrap.innerHTML=`<div class="ovcard">
     <div style="display:flex;justify-content:space-between"><b>${esc(c.title)} · ${esc(nameOf(st)||st.snum)}</b><a href="#" class="link" id="ovx">cancel</a></div>
     ${leaf?`<label>Mark <input type="text" id="ovmark" value="${st.marks[colId]??''}" placeholder="blank = not graded" style="width:110px"></label><hr style="border:none;border-top:1px solid var(--shade)">`:''}
     <label><input type="radio" name="ovact" value="none"${!ov.type?' checked':''}> No override</label>
-    <label><input type="radio" name="ovact" value="exempt"${ov.type==='exempt'?' checked':''}> Exempt — weight moves to the remaining components</label>
+    ${isTotal?'':`<label><input type="radio" name="ovact" value="exempt"${ov.type==='exempt'?' checked':''}> Exempt — weight moves to the remaining components</label>`}
     <label><input type="radio" name="ovact" value="set"${ov.type==='set'?' checked':''}> Replace the grade with <input type="text" id="ovval" value="${ov.type==='set'?ov.value:''}" placeholder="%" style="width:70px"></label>
-    <label><input type="radio" name="ovact" value="moveto"${ov.type==='moveto'?' checked':''}> Move weight to <select id="ovto">${others.map(o=>`<option value="${o.id}"${ov.to===o.id?' selected':''}>${esc(o.code?o.code+' — ':'')}${esc(o.title)}</option>`).join('')}</select></label>
+    ${isTotal?'':`<label><input type="radio" name="ovact" value="moveto"${ov.type==='moveto'?' checked':''}> Move weight to <select id="ovto">${others.map(o=>`<option value="${o.id}"${ov.to===o.id?' selected':''}>${esc(o.code?o.code+' — ':'')}${esc(o.title)}</option>`).join('')}</select></label>`}
     <label>Reason <input type="text" id="ovreason" value="${esc(ov.reason||'')}" placeholder="REQUIRED for any override"></label>
     <p><button id="ovapply">Apply</button></p></div>`;
   const close=()=>wrap.remove();
   wrap.addEventListener('click',ev=>{ if(ev.target===wrap||ev.target.id==='ovx'){ ev.preventDefault(); close(); } });
   wrap.querySelector('#ovval').addEventListener('focus',()=>{ wrap.querySelector('input[value="set"]').checked=true; });
-  wrap.querySelector('#ovto').addEventListener('focus',()=>{ wrap.querySelector('input[value="moveto"]').checked=true; });
+  wrap.querySelector('#ovto')?.addEventListener('focus',()=>{ wrap.querySelector('input[value="moveto"]').checked=true; });
   wrap.querySelector('#ovapply').addEventListener('click',()=>{
     const act=wrap.querySelector('input[name="ovact"]:checked').value;
     const reason=wrap.querySelector('#ovreason').value.trim();
