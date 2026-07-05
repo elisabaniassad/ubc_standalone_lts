@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Gradebook</title>
+<title>Gradebook v2</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,400;0,600;0,700&display=swap" rel="stylesheet">
 <style>
@@ -52,6 +52,8 @@
   .gtog { display:inline-block; min-width:1em; }
   #gbtable input.mark { width:56px; border:none; font:inherit; background:transparent; text-align:center; }
   th.sortable { cursor:pointer; }
+  #gbtable th.gcat.togglable { cursor:pointer; }
+  .gtog { display:inline-block; min-width:1em; }
   .gbck { cursor:pointer; }
   .dot { display:inline-block; width:12px; height:12px; border:1px solid var(--line); opacity:.25; }
   .gbck.on .dot { opacity:1; }
@@ -74,22 +76,82 @@
   .bktlbl { font-size:10px; color:var(--muted); }
   .x { border:none; background:none; color:var(--muted); font-size:15px; cursor:pointer; padding:2px 6px; }
   .x:hover { color:#a00; background:none; }
+  /* the OVERALL GRADE CALCULATION table (the Lifeboat scheme table) */
+  table.scheme { width:100%; table-layout:fixed; }
+  .calcwrap { display:flex; gap:20px; align-items:flex-start; }
+  .calcwrap .schemeside { flex:1 1 68%; min-width:0; }
+  .calcwrap .ovside { flex:1 1 30%; min-width:260px; }
+  .ovside h3 { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 6px; }
+  table.ovtable { width:100%; table-layout:fixed; }
+  table.ovtable th, table.ovtable td { border:1px solid var(--line); text-align:left; font-size:12px; padding:3px 7px; overflow-wrap:break-word; }
+  table.ovtable th.sid { width:88px; }
+  table.ovtable tr[data-ovcol] { cursor:pointer; }
+  table.ovtable tr[data-ovcol]:hover td { background:var(--shade); }
+  #gbtable td.gcell { cursor:pointer; }
+  #gbtable td.gcell:hover { background:var(--shade); }
+  table.scheme th, table.scheme td { border:1px solid var(--line); text-align:left; overflow:hidden; }
+  table.scheme th.pctcol, table.scheme td.pctcol { width:7%; text-align:center; white-space:nowrap; }
+  table.scheme th.codecol { width:8%; }
+  table.scheme th.formcol { width:30%; }
+  table.scheme td.xcol, table.scheme th.xcol { border:none; width:3%; text-align:center; }
+  /* the indent/outdent column: a narrow, bordered, first-class table column
+     snug against the component names — only the TEXT indents */
+  table.scheme td.gripcol, table.scheme th.gripcol { width:3%; min-width:26px; text-align:center; padding:2px 2px; }
+  table.scheme td.ctl, table.scheme th.ctl { width:6%; min-width:48px; white-space:nowrap; text-align:center; padding:2px 3px; }
+  table.scheme input { font:inherit; border:none; background:transparent; padding:2px 4px; width:100%; box-sizing:border-box; }
+  table.scheme input:focus { outline:none; background:#fff; box-shadow:inset 0 0 0 1px var(--line); }
+  table.scheme input.wpct { width:48px; text-align:right; }
+  table.scheme tr.totalrow td { font-weight:600; border-top:2px solid var(--line); }
+  .plus { font-size:15px; line-height:1; padding:1px 8px; }
+  .scheme th .plus, .scheme td .plus { float:right; }
+  .grip { cursor:grab; color:var(--muted); padding:0 6px 0 2px; }
+  .indent { border:none; background:none; cursor:pointer; color:var(--muted); padding:0 4px; font-size:12px; }
+  .indent:hover { color:var(--line); background:none; }
+  .tri { border:none; background:none; cursor:pointer; color:var(--line); padding:0 8px; font-size:19px; line-height:1; margin-left:auto; }
+  .tri:hover { background:none; color:#0a4a86; }
+
+  table.scheme tr.child td { background:#fafafa; }
+  /* a component WITH children is a fold — it reads pale blue, like the
+     grid's computed columns */
+  table.scheme tr.parentrow td { background:#eaf3fa; }
+  input.badformula { background:#fde7e4 !important; }
+  /* per-cell overrides (LMS1): set = pale orange, exempt/moveto = grey */
+  td.ovset { background:#ffe6c4; cursor:pointer; }
+  td.ovin { background:#fff3e0; }      /* a fold containing an overridden grade */
+  td.capd { background:#ffd9a8; }      /* grade pulled down by a cap rule: orange */
+  td.capsrc { background:#ffe4c2; }    /* the component that tripped the cap */
+  td.bmp  { background:#e3f2df; }      /* grade lifted by a BUMP pair: pale green */
+  td.bst  { background:#bfe3b8; }      /* grade lifted by BOOST: the darker green */
+  td.ovex { background:#e4e7ea; color:var(--muted); cursor:pointer; }
+  .gbwas { font-size:10px; color:var(--muted); }
+  .xmini { float:right; font-size:10px; line-height:1.5; padding:0 3px; margin-left:4px; color:var(--muted); }
+  .bfill { position:relative; }
+  .bfill .bsel { position:absolute; left:0; right:0; bottom:0; background:#e0a800; }  /* the filtered students, gold, inside their cohort bar */
+  #ovpop { position:fixed; inset:0; background:rgba(0,0,0,.25); z-index:9; }
+  .ovcard { background:#fff; border:2px solid var(--line); max-width:420px; margin:16vh auto; padding:14px; }
+  .ovcard label { display:block; margin:6px 0; }
+  .ovcard input[type=text] { font:inherit; border:1px solid var(--line); padding:3px 6px; width:100%; box-sizing:border-box; }
+  .ovcard select { max-width:100%; }
+  /* live sample columns: see the formulas WORK as you type them */
+  table.scheme td.statcol, table.scheme th.statcol { width:4.5%; text-align:center; color:var(--muted); }
+  table.scheme tr.dragover { outline:2px dashed var(--line); outline-offset:-2px; }
+  #gbtable td.computed { color:var(--muted); }
 </style>
 </head>
 <body>
-<h1>GRADEBOOK <span class="note">— standalone. Everything stays on this machine; browser storage self-clears 2 hours after your last change (Download data to keep work longer); nothing leaves it except your exports.</span></h1>
+<h1>GRADEBOOK v2 <span class="note">— standalone. Everything stays on this machine; browser storage self-clears 2 hours after your last change (Download data to keep work longer); nothing leaves it except your exports.</span></h1>
 
 <div class="setup bar">
-  <label>Academic Period <input id="fterm" placeholder="2025-26 Winter Term 2 (UBC-V)" style="width:230px" title="a term like 2025W2 becomes the full Workday period; a full period string passes through as-is"></label>
+  <label>Academic Period <input id="fterm" placeholder="2025-26 Winter Term 2 (UBC-V)" style="width:230px" title="copied into the Workday export exactly as typed"></label>
   <label>Course Subject Code <input id="fsubj" placeholder="CPSC" style="width:70px"></label>
   <label>Course Number <input id="fnum" placeholder="210" style="width:60px"></label>
   <label>Section Number <input id="fsec" placeholder="101" style="width:60px" title="used for students whose row has no section"></label>
   <span style="flex:1"></span>
-  <button id="addcol">+ column</button>
   <button id="addstu">+ student</button>
   <input type="file" id="csvfile" accept=".csv" style="display:none">
   <button id="importbtn" title="CSV: Student #, First, Last, Section (optional), then one column per assessment">Import CSV</button>
   <input type="file" id="jsonfile" accept=".json" style="display:none">
+  <input type="file" id="schfile" accept=".txt,.scheme,.json" style="display:none">
   <button id="dl" title="save everything (students, marks, formulas) as a file — works even when browser storage is full">Download data</button>
   <button id="loadbtn" title="load a previously downloaded data file">Load data</button>
   <button id="wipe" title="erase everything stored in this browser">start over</button>
@@ -100,7 +162,13 @@
 Formulas: <code>SCALE(10)</code>, <code>if(this&gt;89,100)</code>, <code>clamp(this,0,100)</code>, arithmetic on <code>this</code> or other columns' short codes.<br>
 Type <code>***</code> as a column's short code or formula to make it THE course <b>Raw</b> column: it auto-names the column (e.g. Tentative Grade → <code>TG</code>) and writes that name into the Raw formula for you.<br>
 Grade formula (optional — nothing is applied unless you type it): <code>ROUND()+BOOST</code> (boost lifts a grade sitting within N of a UBC boundary), <code>ROUNDUP</code>/<code>ROUNDDOWN</code>, <code>SCALE(n)</code>, <code>+BOOST(2)</code>. The Grade column always reports whole numbers.<br>
+Parent folds: <code>DROP(LOWEST[,n])</code>/<code>DROP(HIGHEST[,n])</code> · <code>KEEP(HW5)</code> protects members from the drop · <code>SUM</code>/<code>MAX</code>/<code>MIN</code>.
+Grade formula extras: <code>BUMP(89-&gt;90,79-&gt;80)</code> boosts those exact values only; <code>or(TB,0)</code> takes the first value that exists (so blank TB falls back to 0; <code>orzero(TB)</code> is shorthand) — e.g. raw formula <code>+or(TB,0)</code>.<br>
+Click any grade in the marks table to edit it: change the mark, <b>Exempt</b> it (weight renormalizes), <b>Replace the grade</b>, or <b>Move weight to</b> another component — a reason is required for overrides, and every change appears in the OVERRIDES ledger beside the scheme.<br>
 A <b>Final Exam</b> column scoring exactly 0 flags <b>DNW</b>.</p>
+
+<h2 style="display:flex;align-items:center">Overall grade calculation<span style="flex:1"></span><button id="schdl" style="font-weight:400;text-transform:none;letter-spacing:0" title="save the SCHEME (structure, codes, formulas, weights — no students, no marks) as a file">Download scheme</button><button id="schload" style="font-weight:400;text-transform:none;letter-spacing:0;margin-left:8px" title="load a scheme file: components match your existing columns by title/code; marks are kept">Load scheme</button></h2>
+<div id="calc"></div>
 
 <h2>Grade distribution</h2>
 <div class="histcard">
@@ -111,27 +179,59 @@ A <b>Final Exam</b> column scoring exactly 0 flags <b>DNW</b>.</p>
 </div>
 
 <h2>Marks</h2>
-<div class="bar"><input type="search" id="filter" placeholder="Filter — name, student #, section, dnw, or a grade test on the total (>50, 40..60, ==0)"><span id="filtinfo" class="note"></span></div>
-<div style="overflow-x:auto"><div id="grid"></div></div>
+<div class="bar"><input type="search" id="filter" placeholder="Filter — name, student #, section, or a test: >50, 40..60, RAW=45, HW<40, capped, bumped, boosted, overridden, dnw"><span id="filtinfo" class="note"></span></div>
+<div style="overflow-x:auto;padding-bottom:14px"><div id="grid"></div></div>
 
 <script>
 'use strict';
-/* ════ the model — one flat course: students × columns ════
-   D = { code, term, cols:[{id,title,code,formula,weight}],
-         students:[{snum,first,last,section,marks:{colId:number|null}}],
-         rawFormula, gradeFormula } — persisted to localStorage. */
+/* ════ the model — students × components, ONE level of nesting ════
+   D = { subject, number, section, term,
+         cols:[{id,title,code,formula,weight,parent}],   parent = a col id -> this row is
+         students:[{snum,…,marks:{colId}}],              indented under it; a parent's value
+         rawFormula, gradeFormula }                      aggregates its children per its
+   — persisted to localStorage (2h TTL).                 formula (DROP(LOWEST), SUM, AVG…) */
 const KEY='gradebook-standalone.v1';
 const TTL=2*60*60*1000;                   // grade data self-destructs after 2 hours
 let D=load()||{subject:'',number:'',section:'',term:'',cols:[],students:[],rawFormula:'',gradeFormula:''};
 if(D.code&&!D.subject){ const m=/^(.*\S)\s+(\S+)$/.exec(D.code); D.subject=m?m[1]:D.code; D.number=m?m[2]:''; delete D.code; }
-let SERIES=null, FILTER='', BUCKET='LETTER', SORT=null, STUCOL=false;
+let SERIES=null, FILTER='', BUCKET='LETTER', SORT=null, STUCOL=false; const COLL=new Set();
 function load(){
   try{
     const x=JSON.parse(localStorage.getItem(KEY));
-    if(x&&x.d&&x.ts&&(Date.now()-x.ts)<TTL) return x.d;
+    if(x&&x.d&&x.ts&&(Date.now()-x.ts)<TTL) return sanitize(x.d);
   }catch(e){}
   localStorage.removeItem(KEY);           // expired (or the old un-stamped format)
   return null;
+}
+// old sessions (pre-hierarchy, pre-Workday-fields) get coerced into the
+// current shape: missing fields default, dangling parents detach, marks
+// for deleted columns drop — no more half-migrated weirdness
+function sanitize(d){
+  if(!d||typeof d!=='object') return null;
+  d.subject=d.subject||''; d.number=d.number||''; d.section=d.section||''; d.term=d.term||'';
+  d.rawFormula=d.rawFormula||''; d.gradeFormula=d.gradeFormula||''; d.schemeNotes=d.schemeNotes||'';
+  d.capRules=(Array.isArray(d.capRules)?d.capRules:[]).filter(r=>r&&typeof r==='object').map(r=>({cond:String(r.cond||''),to:isFinite(+r.to)?+r.to:null}));
+  if(d.code&&!d.subject){ const m=/^(.*\S)\s+(\S+)$/.exec(d.code); d.subject=m?m[1]:d.code; d.number=m?m[2]:''; }
+  delete d.code;
+  d.cols=(Array.isArray(d.cols)?d.cols:[]).filter(c=>c&&c.id&&c.title!=null).map(c=>({
+    id:String(c.id), title:String(c.title), code:c.code||'', formula:c.formula||'',
+    weight:(c.weight==null||c.weight==='')?null:+c.weight, max:(+c.max>0)?+c.max:null, parent:c.parent||null}));
+  const ids=new Set(d.cols.map(c=>c.id));
+  fillCodes(d.cols);                                      // every component gets a handle
+  d.cols.forEach(c=>{ if(c.parent&&(!ids.has(c.parent)||c.parent===c.id)) c.parent=null; });
+  d.cols.forEach(c=>{                                    // any depth; break CYCLES only
+    const seen=new Set([c.id]); let x=c;
+    while(x&&x.parent){ if(seen.has(x.parent)){ c.parent=null; break; }
+      seen.add(x.parent); x=d.cols.find(y=>y.id===x.parent); } });
+  d.students=(Array.isArray(d.students)?d.students:[]).filter(st=>st&&typeof st==='object').map(st=>{
+    const out={snum:st.snum||'', first:st.first||'', last:st.last||'', section:st.section||'',
+      marks:Object.fromEntries(Object.entries(st.marks||{}).filter(([k,v])=>ids.has(k)&&v!=null&&v!==''))};
+    const ov=Object.fromEntries(Object.entries(st.ov||{}).filter(([k,o])=>o&&(
+      (k==='__total__'&&o.type==='set'&&isFinite(+o.value))||
+      (ids.has(k)&&((o.type==='exempt')||(o.type==='set'&&isFinite(+o.value))||(o.type==='moveto'&&ids.has(o.to)))))));
+    if(Object.keys(ov).length) out.ov=ov;
+    return out; });
+  return d;
 }
 // while the page sits open, the STORED copy still expires (in-memory work is
 // untouched — Download data remains the real save)
@@ -160,23 +260,43 @@ function applyBoost(v,f){ const m=/\+\s*boost\s*(?:\(\s*(\d+(?:\.\d+)?)\s*\))?/i
 /* tiny safe expression evaluator: numbers, this, SHORT CODES (via lookup),
    + - * / ( ), if(cond,then[,else]), clamp(x,a,b), min/max(a,b), comparisons
    inside if. No eval(). */
-function evalExpr(value,src,lookup){
+function evalExpr(value,src,lookup,wlookup){
   if(!src) return value;
   src=src.replace(/^\s*=/,'');          // spreadsheet fingers: "=TG" means TG
+  if(/^\s*\+/.test(src)) src='this'+src;   // "+TB" means "this + TB"
   let i=0; const s=src;
   const ws=()=>{ while(i<s.length&&/\s/.test(s[i])) i++; };
   function primary(){ ws();
     if(s[i]==='('){ i++; const v=cmp(); ws(); if(s[i]===')') i++; return v; }
     if(s[i]==='-'){ i++; return -primary(); }
-    const fn=/^(if|clamp|min|max|round|roundup|rounddown)\s*\(/i.exec(s.slice(i));
+    const fn=/^(if|clamp|min|max|round|roundup|rounddown|orzero|or|n0|wavg|avg)\s*\(/i.exec(s.slice(i));
+    if(fn&&fn[1].toLowerCase()==='wavg'){
+      // WAVG(T1,T2,FIN): codes only — each weighted by its component's course
+      // weight; blank references drop out (with their weight)
+      i+=fn[0].length; let sv=0,sw=0;
+      for(;;){ ws();
+        const w=/^[A-Za-z_][A-Za-z0-9_]*/.exec(s.slice(i)); if(!w) break;
+        i+=w[0].length;
+        const v=lookup?lookup(w[0]):null, wt=wlookup?wlookup(w[0]):1;
+        if(v!=null&&isFinite(v)){ sv+=v*wt; sw+=wt; }
+        ws(); if(s[i]===','){ i++; continue; } break;
+      }
+      if(s[i]===')') i++;
+      return sw?sv/sw:NaN;
+    }
     if(fn){ i+=fn[0].length; const args=[cmp()]; ws();
       while(s[i]===','){ i++; args.push(cmp()); ws(); }
       if(s[i]===')') i++;
       const f=fn[1].toLowerCase();
+      if(f==='n0'||f==='orzero') return isFinite(args[0])?args[0]:0;   // orzero(TB) = TB, or 0 when blank
+      if(f==='or'){ for(const a of args) if(typeof a==='number'&&isFinite(a)) return a; return NaN; }   // or(TB,0): first value that exists
+      if(f==='avg'){ const xs=args.filter(a=>typeof a==='number'&&isFinite(a)); return xs.length?xs.reduce((a,b)=>a+b,0)/xs.length:NaN; }
       if(f==='if') return (args[0]&&args[0]!==0&&args[0]!==false)?(args[1]??value):(args[2]??value);
       if(f==='clamp') return Math.min(args[2]??100,Math.max(args[1]??0,args[0]));
-      if(f==='min') return Math.min(...args);
-      if(f==='max') return Math.max(...args);
+      // min/max IGNORE blanks (a blank reference is absent, not zero) —
+      // so MAX(TB,0) means what it looks like even when TB is empty
+      if(f==='min'){ const xs=args.filter(a=>typeof a==='number'&&isFinite(a)); return xs.length?Math.min(...xs):NaN; }
+      if(f==='max'){ const xs=args.filter(a=>typeof a==='number'&&isFinite(a)); return xs.length?Math.max(...xs):NaN; }
       if(f==='round') return Math.round(args[0]);
       if(f==='roundup') return Math.ceil(args[0]);
       if(f==='rounddown') return Math.floor(args[0]);
@@ -203,25 +323,95 @@ function evalExpr(value,src,lookup){
   return (typeof out==='number'&&isFinite(out))?Math.round(out*10)/10:value;
 }
 function isExpr(f){ return /this|if\s*\(|clamp\s*\(/i.test(f||''); }
+const kidsOf=id=>D.cols.filter(x=>x.parent===id);
+const subtreeOf=id=>{ const out=[]; (function w(pid){ for(const c of D.cols) if(c.parent===pid){ out.push(c); w(c.id); } })(id); return out; };
+const inSubtree=(aid,c)=>{ let x=c,hop=0; while(x&&x.parent&&hop++<50){ if(x.parent===aid) return true; x=D.cols.find(y=>y.id===x.parent); } return false; };
+// move a component (WITH its subtree) so the flat D.cols order stays a
+// clean pre-order: remove the block, then splice it at `idx`
+function moveBlock(c,newParent,idx){
+  const block=[c,...subtreeOf(c.id)];
+  D.cols=D.cols.filter(x=>!block.includes(x));
+  c.parent=newParent;
+  D.cols.splice(idx==null?D.cols.length:idx,0,...block);
+}
+/* fold a parent's children: DROP(LOWEST[,n]) / DROP(HIGHEST[,n]) (never drops
+   them all), SUM (capped 100), MAX, MIN; default = weight-weighted mean */
+function aggregate(xs,f){
+  let list=[...xs];
+  // KEEP(HW5,…) protects members (by short code) from being dropped
+  const kp=/keep\s*\(([^)]*)\)/i.exec(f||'');
+  const prot=new Set((kp?kp[1].split(','):[]).map(x=>x.trim().toLowerCase()).filter(Boolean));
+  const m=/drop\s*\(\s*(lowest|highest)\s*(?:,\s*(\d+))?\s*\)/i.exec(f||'');
+  if(m){
+    const kept=list.filter(x=>prot.has((x.code||'').toLowerCase()));
+    let pool=list.filter(x=>!prot.has((x.code||'').toLowerCase()));
+    const n=Math.min(+(m[2]||1), pool.length-1);
+    if(n>0){ pool.sort((a,b)=>a.g-b.g); pool=/lowest/i.test(m[1])?pool.slice(n):pool.slice(0,pool.length-n); }
+    list=[...pool,...kept];
+  }
+  if(/\bsum\b/i.test(f||'')) return Math.min(100,list.reduce((a,x)=>a+x.g,0));
+  if(/\bmax\b/i.test(f||'')) return Math.max(...list.map(x=>x.g));
+  if(/\bmin\b/i.test(f||'')) return Math.min(...list.map(x=>x.g));
+  const W=list.reduce((a,x)=>a+(+x.w||0),0);
+  if(!W) return list.reduce((a,x)=>a+x.g,0)/(list.length||1);   // all-zero shares: plain mean
+  return list.reduce((a,x)=>a+x.g*(+x.w),0)/W;
+}
+const FKEYWORDS=new Set(['this','if','clamp','min','max','round','roundup','rounddown','scale','boost','bump','keep','lowest','highest','sum','drop','avg','n0','orzero','or','wavg']);
 function codeRefs(f){ const ids=(f||'').match(/[A-Za-z_][A-Za-z0-9_]*/g)||[];
-  const K=new Set(['this','if','clamp','min','max','round','roundup','rounddown','scale','boost']);
-  return ids.some(w=>!K.has(w.toLowerCase())&&D.cols.some(c=>(c.code||'').toLowerCase()===w.toLowerCase())); }
+  return ids.some(w=>!FKEYWORDS.has(w.toLowerCase())&&D.cols.some(c=>(c.code||'').toLowerCase()===w.toLowerCase())); }
+// names that are neither keywords nor any column's short code: a formula
+// containing one silently computes NOTHING — so we make it loud instead
+function unknownRefs(f){ const ids=(f||'').match(/[A-Za-z_][A-Za-z0-9_]*/g)||[];
+  return [...new Set(ids.filter(w=>!FKEYWORDS.has(w.toLowerCase())
+    &&!D.cols.some(c=>(c.code||'').toLowerCase()===w.toLowerCase())))]; }
+function fmClass(f){ return unknownRefs(f).length?' badformula':''; }
+function fmTitle(f,fb){ const u=unknownRefs(f);
+  return u.length?`unknown name${u.length>1?'s':''}: ${u.join(', ')} — not a keyword or any column's short code, so this formula does NOTHING`:fb; }
 function codeLookup(st,seen){ return name=>{
   const cc=D.cols.find(x=>(x.code||'').toLowerCase()===name.toLowerCase());
   if(!cc||(seen&&seen.has(cc.id))) return null;
   return colGrade(st,cc,new Set([...(seen||[])])); }; }
-function colGrade(st,c,seen){ const raw=st.marks[c.id];
-  if(raw==null||raw==='') return null;
-  let v=applyScale(+raw,c.formula);
+function codeWeight(name){
+  const cc=D.cols.find(x=>(x.code||'').toLowerCase()===name.toLowerCase());
+  return cc?((cc.weight==null||cc.weight==='')?1:+cc.weight):1; }
+function colGrade(st,c,seen,skipOv){
+  const ov=!skipOv&&st.ov&&st.ov[c.id];
+  if(ov){
+    if(ov.type==='exempt') return null;                    // absent: weight renormalizes
+    if(ov.type==='set') return Math.round(+ov.value*10)/10;
+    if(ov.type==='moveto'){ const t=D.cols.find(x=>x.id===ov.to);
+      return (t&&!(seen&&seen.has(t.id)))?colGrade(st,t,new Set([...(seen||[]),c.id])):null; }
+  }
+  const kids=kidsOf(c.id);
+  if(kids.length){                        // a PARENT: fold the indented children
+    const xs=kids.map(k=>({g:colGrade(st,k,new Set([...(seen||[]),c.id])),
+                           w:(k.weight==null||k.weight==='')?1:+k.weight,   // blank = EQUAL weighting
+                           code:k.code||''}))
+                 .filter(x=>x.g!=null);
+    if(!xs.length) return null;
+    let v=aggregate(xs,c.formula);
+    v=applyScale(v,c.formula);
+    if(isExpr(c.formula)||codeRefs(c.formula))
+      v=evalExpr(v,c.formula,codeLookup(st,new Set([...(seen||[]),c.id])),codeWeight);
+    return Math.round(v*10)/10;
+  }
+  const raw=st.marks[c.id];
+  // a leaf with no mark but a code-referencing formula is a COMPUTED column
+  // (e.g. WAVG(T1,T2,T3,FE)) — evaluate it; only a plain mark column bails
+  const blank=raw==null||raw==='';
+  if(blank&&!(isExpr(c.formula)||codeRefs(c.formula))) return null;
+  let v=applyScale(blank?NaN:+raw,c.formula);
   if(isExpr(c.formula)||codeRefs(c.formula))
-    v=evalExpr(v,c.formula,codeLookup(st,new Set([...(seen||[]),c.id])));
+    v=evalExpr(v,c.formula,codeLookup(st,new Set([...(seen||[]),c.id])),codeWeight);
+  if(typeof v!=='number'||!isFinite(v)) return null;
   return Math.round(v*10)/10; }
 function totals(st){
   // the *** short code marks THE course-raw column: its grade IS the raw
   // value, no weights or formulas needed (the converter's one-liner)
   const star=D.cols.find(c=>(c.code||'').trim()==='***');
   let t=0,w=0;
-  for(const c of D.cols){ const g=colGrade(st,c), wt=+c.weight||0;
+  for(const c of D.cols){ if(c.parent) continue;   // children feed their parent
+    const g=colGrade(st,c), wt=+c.weight||0;
     if(g!=null&&wt>0){ t+=g*wt; w+=wt; } }
   const base=star?colGrade(st,star):(w?t/w:null);
   const rf=D.rawFormula||'';
@@ -229,51 +419,197 @@ function totals(st){
   if(rf&&(isExpr(rf)||codeRefs(rf))){
     // the raw formula can BE the value (converter mode: "TG", no weights);
     // NaN in = NaN out for students whose referenced column is blank
-    const r=evalExpr(base==null?NaN:base, rf, codeLookup(st));
+    const r=evalExpr(base==null?NaN:base, rf, codeLookup(st), codeWeight);
     raw=(typeof r==='number'&&isFinite(r))?r:null;
   }
   if(raw==null) return null;
   raw=applyScale(raw,rf);
   raw=Math.round(raw*10)/10;
   let g=raw;
-  const gf=D.gradeFormula||'';
-  g=applyScale(g,gf);
-  if(isExpr(gf)||codeRefs(gf)) g=evalExpr(g,gf,codeLookup(st));
-  if(/rounddown/i.test(gf)) g=Math.floor(g); else if(/roundup/i.test(gf)) g=Math.ceil(g); else g=Math.round(g);
-  const b=applyBoost(g,gf);
-  return {raw,grade:b.v,boosted:b.boosted}; }
-function dnwOf(st){ const fin=D.cols.find(c=>/final\s*exam/i.test(c.title));
-  return !!(fin&&+st.marks[fin.id]===0&&st.marks[fin.id]!==''&&st.marks[fin.id]!=null); }
+  // STAGES: 'ROUND()+BUMP(89->90,79->80), if(HW<40,45)' — TOP-LEVEL commas
+  // (outside any parentheses; semicolons work too) separate stages, applied
+  // left to right; a stage is token ops (SCALE/ROUND/BUMP/BOOST) or an
+  // expression over this + codes (the hurdle if()s come after the rounding)
+  const stages=splitStages(D.gradeFormula||'');
+  let rounded=false, boosted=false, bumped=false;
+  const tokenOnly=x=>x.replace(/scale\s*\([^)]*\)/ig,'').replace(/bump\s*\([^)]*\)/ig,'')
+    .replace(/\+?\s*boost\s*(\([^)]*\))?/ig,'').replace(/round(up|down)?\s*(\(\s*\))?/ig,'').replace(/[+\s]/g,'')==='';
+  for(const stg of stages){
+    if(tokenOnly(stg)){
+      g=applyScale(g,stg);
+      if(/rounddown/i.test(stg)){ g=Math.floor(g); rounded=true; }
+      else if(/roundup/i.test(stg)){ g=Math.ceil(g); rounded=true; }
+      else if(/round/i.test(stg)){ g=Math.round(g); rounded=true; }
+      const bm=/bump\s*\(([^)]*)\)/i.exec(stg);
+      if(bm) for(const pr of bm[1].split(',')){
+        const m2=/(-?\d+(?:\.\d+)?)\s*->\s*(-?\d+(?:\.\d+)?)/.exec(pr);
+        if(m2&&g===+m2[1]){ g=+m2[2]; bumped=true; break; }
+      }
+      const b=applyBoost(g,stg); if(b.boosted) boosted=true; g=b.v;
+    } else if(isExpr(stg)||codeRefs(stg)) g=evalExpr(g,stg,codeLookup(st),codeWeight);
+  }
+  if(!rounded) g=Math.round(g);
+  // GRADE CAP RULES: policy hurdles as their own thing — when a rule's
+  // condition holds, the grade is capped at the rule's value (min, so a
+  // student already below the cap keeps their computed grade)
+  const capsHit=[]; const gPre=g;
+  for(const r of (D.capRules||[])){
+    if(!r.cond||!isFinite(+r.to)) continue;
+    const hit=evalExpr(0,`if(${r.cond},1,0)`,codeLookup(st),codeWeight)===1;
+    if(hit){ capsHit.push(r); g=Math.min(g,Math.round(+r.to)); }
+  }
+  const capped=capsHit.length>0&&g<gPre;   // matched a rule AND it moved the grade down
+  // the course-total override (the discretionary word): final say, with reason
+  const tov=st.ov&&st.ov.__total__;
+  const grade=tov?Math.round(+tov.value):g;
+  return {raw,grade,bumped,boosted,overridden:!!tov,computed:g,capsHit,capped}; }
+// split on commas/semicolons at parenthesis depth 0 — the commas inside
+// BUMP(89->90,79->80) and if(HW<40,45) are payload, not separators
+function splitStages(src){
+  const out=[]; let depth=0, cur='';
+  for(const ch of src){
+    if(ch==='(') depth++;
+    else if(ch===')') depth=Math.max(0,depth-1);
+    if((ch===','||ch===';')&&depth===0){ out.push(cur); cur=''; continue; }
+    cur+=ch;
+  }
+  out.push(cur);
+  return out.map(x=>x.trim()).filter(Boolean);
+}
+function dnwOf(st){
+  // the first column titled like the final exam — a meta-column fold or a
+  // plain mark column both work, because we ask for its VALUE, not its mark
+  const fin=D.cols.find(c=>/final\s*exam/i.test(c.title));
+  return !!fin&&colGrade(st,fin)===0; }
 
 /* ════ render ════ */
+function collapseAll(){ for(const c of D.cols) if(D.cols.some(x=>x.parent===c.id)) COLL.add(c.id); }
 function render(){
   for(const [id,f] of [['fsubj','subject'],['fnum','number'],['fsec','section'],['fterm','term']]){
     const fe=document.getElementById(id); if(fe) fe.value=D[f]||''; }
   if(!SERIES) SERIES=new Set(['__total__']);   // chart starts with just the Grade series
   const PAL=['#6fa8dc','#bda1cb','#93c47d','#e0a800','#76a5af','#c27ba0','#8e7cc3','#dd7e6b','#6aa84f','#a4c2f4','#f6b26b','#999999'];
   const color=i=>PAL[i%PAL.length];
-  const rosterN=STUCOL?1:4;
+  const rosterN=STUCOL?1:3;
   const lbl=t=>`<th colspan="${rosterN}">${t}</th>`;
+  // display columns: each top-level's CHILDREN (editable), then the parent
+  // (computed fold); childless top-levels are plain mark columns
+  const DISP=[];
+  // PRE-order, matching the calculation table's outline: the container's
+  // fold first, then the components indented under it
+  D.cols.filter(c=>!c.parent).forEach(function walk(n){
+    const nk=D.cols.filter(x=>x.parent===n.id);
+    if(!nk.length){ DISP.push({c:n,computed:false}); return; }
+    DISP.push({c:n,computed:true});
+    if(!COLL.has(n.id)) nk.forEach(walk);
+  });
   const csep=i=>i===0?' class="gsep"':'';
-  const sub=(name,cell,course)=>`<tr class="sub">${lbl(name)}${D.cols.map((c,i)=>`<td${csep(i)}>${cell(c,i)}</td>`).join('')}${course}</tr>`;
+  const sub=(name,cell,course)=>`<tr class="sub">${lbl(name)}${DISP.map((d,i)=>`<td${csep(i)}>${cell(d.c,i)}</td>`).join('')}${course}</tr>`;
+  // ── the calculation table (the Lifeboat layout): components, codes,
+  //    formulas, weights — edited HERE; the grid below is marks ──
+  const wsum=D.cols.reduce((a,c)=>a+(c.parent?0:(+c.weight||0)),0);
+  const sumOk=Math.round(wsum)===100||(!wsum&&(D.rawFormula||D.cols.some(c=>(c.code||'').trim()==='***')));
+  // live proof the formulas work: lowest / highest / median student and the
+  // average, per component, straight from the marks below
+  const statFmt=v=>v==null?'—':Math.round(v*10)/10;
+  const statsOf=vals=>{
+    const xs=vals.filter(v=>v!=null).sort((a,b)=>a-b);
+    if(!xs.length) return {lo:null,hi:null,med:null,avg:null};
+    return {lo:xs[0],hi:xs[xs.length-1],
+            med:xs.length%2?xs[(xs.length-1)/2]:(xs[xs.length/2-1]+xs[xs.length/2])/2,
+            avg:xs.reduce((a,b)=>a+b,0)/xs.length};
+  };
+  const compStats=c=>statsOf(D.students.map(st=>colGrade(st,c)));
+  const statCells=st=>`<td class="statcol">${statFmt(st.lo)}</td><td class="statcol">${statFmt(st.hi)}</td><td class="statcol">${statFmt(st.med)}</td><td class="statcol">${statFmt(st.avg)}</td>`;
+  const ordered=[];      // pre-order walk, any depth; collapsed subtrees hide
+  (function walk(pid,depth,hidden){
+    for(const c of D.cols) if((c.parent||null)===pid){
+      if(!hidden) ordered.push({c,depth});
+      walk(c.id,depth+1,hidden||COLL.has(c.id));
+    }
+  })(null,0,false);
+  const rowOf=({c,depth})=>{
+    const child=!!c.parent, parent=kidsOf(c.id).length>0;
+    // preceding SIBLING (same parent) = what → would nest this under
+    const sibs=D.cols.filter(x=>(x.parent||null)===(c.parent||null));
+    const prevSib=sibs[sibs.indexOf(c)-1];
+    const ind=(child?`<button class="indent" data-out="${c.id}" title="promote one level up — later siblings become its sub-components, so nothing moves">←</button>`:'')
+      +(prevSib?`<button class="indent" data-ind="${c.id}" title="make this a sub-component of ${esc(prevSib.title)} — nothing moves, only the depth changes">→</button>`:'');
+    const tri=parent?`<button class="tri" data-tog="${c.id}" title="show/hide the components under ${esc(c.title)}">${COLL.has(c.id)?'▸':'▾'}</button>`:'';
+    return `<tr${parent?' class="parentrow"':(child?' class="child"':'')} data-cid="${c.id}">
+      <td class="gripcol"><span class="grip" draggable="true" data-drag="${c.id}" title="drag to reorder">≡</span></td>
+      <td class="ctl">${ind}</td>
+      <td><input data-ccode="${c.id}" value="${esc(c.code||'')}" placeholder="—" style="text-align:center"></td>
+      <td style="padding-left:${8+depth*24}px"><span style="display:flex;align-items:center"><input data-ctitle="${c.id}" value="${esc(c.title)}" style="flex:1;width:auto">${tri}</span></td>
+      <td><input class="${fmClass(c.formula)}" data-cform="${c.id}" value="${esc(c.formula||'')}" placeholder="—" title="${esc(fmTitle(c.formula, parent?'folds the indented children: DROP(LOWEST[,n]) · DROP(HIGHEST[,n]) · SUM · MAX · MIN · then SCALE(n)/expressions':"SCALE(10) · if(this>89,100) · clamp(this,0,100) · other columns' codes"))}"></td>
+      <td class="statcol"><input data-cmax="${c.id}" value="${c.max??''}" inputmode="decimal" placeholder="100" title="max grade — what this column is out of; half of it draws the fail line" style="width:100%;text-align:center;border:none;background:transparent;font:inherit;color:inherit"></td>
+      <td class="pctcol"><input class="wpct" data-cw="${c.id}" value="${c.weight??''}" inputmode="decimal" placeholder="${child?'eq':''}" title="${child?'share WITHIN '+esc((D.cols.find(x=>x.id===c.parent)||{}).title||'the parent')+' — blank = equal weighting (the default); the parent\'s formula can change how they combine':'% of course grade'}">%</td>
+      ${statCells(compStats(c))}
+      <td class="xcol"><button class="x" data-delcol="${c.id}" title="remove ${esc(c.title)}${parent?' (its children become top-level)':' and its marks'}">×</button></td></tr>`; };
+  // the OVERRIDES ledger: one row per change, worded like you'd say it
+  const ovRows=[];
+  D.students.forEach((st,si)=>{ for(const [colId,ov] of Object.entries(st.ov||{})){
+    if(colId==='__total__'){
+      const t=totals(st);
+      ovRows.push(`<tr data-ovcol="__total__" data-ovsi="${si}" title="click to edit"><td>${esc(st.snum||nameOf(st)||'?')}</td><td>${esc(`Course grade: ${t?t.computed:'—'} → ${ov.value}`)}</td><td>${esc(ov.reason||'')}</td></tr>`);
+      continue;
+    }
+    const c=D.cols.find(x=>x.id===colId); if(!c) continue;
+    const orig=colGrade(st,c,null,true);
+    const change=ov.type==='exempt'?`${c.title}: ${orig??'—'} → exempt`
+      :ov.type==='set'?`${c.title}: ${orig??'—'} → ${ov.value}`
+      :`${c.title}: weight → ${(x=>x?(x.code||x.title):'?')(D.cols.find(x=>x.id===ov.to))}`;
+    ovRows.push(`<tr data-ovcol="${colId}" data-ovsi="${si}" title="click to edit"><td>${esc(st.snum||nameOf(st)||'?')}</td><td>${esc(change)}</td><td>${esc(ov.reason||'')}</td></tr>`);
+  }});
+  const ovTable=`<h3>Overrides</h3><table class="ovtable"><tr><th class="sid">Student ID</th><th>Change</th><th>Reason</th></tr>
+    ${ovRows.join('')||'<tr><td colspan="3" class="note" style="border-color:#e6e6e6">none — click a grade in the marks table to add one</td></tr>'}</table>`;
+  document.getElementById('calc').innerHTML=`<div class="calcwrap"><div class="schemeside"><table class="scheme">
+    <tr><th class="gripcol"></th><th class="ctl"></th><th class="codecol">Code</th><th>Component <button id="addcol" class="plus" title="add a component">+</button></th><th class="formcol">Formula</th><th class="statcol">MAX</th><th class="pctcol">%</th><th class="statcol">LOW</th><th class="statcol">HIGH</th><th class="statcol">MED</th><th class="statcol">AVG</th><th class="xcol"></th></tr>
+    ${ordered.map(rowOf).join('')}
+    <tr><td class="gripcol"></td><td class="ctl"></td><td></td><td>RAW</td>
+      <td><input class="${fmClass(D.rawFormula)}" data-rawform value="${esc(D.rawFormula||'')}" placeholder="weighted sum" title="${esc(fmTitle(D.rawFormula,'Raw formula — e.g. this+or(TB,0)'))}"></td>
+      <td class="pctcol"></td>
+      <td class="statcol"></td>
+      ${statCells(statsOf(D.students.map(st=>{ const t=totals(st); return t?t.raw:null; })))}
+      <td class="xcol"></td></tr>
+    ${((D.capRules||[]).length?D.capRules:[null]).map((r,ri)=>{
+      const nhit=r?D.students.filter(st=>{ const t=totals(st); return t&&t.capsHit.includes(r); }).length:0;
+      return `<tr><td class="gripcol"></td><td class="ctl"></td><td></td>
+      <td class="note" style="white-space:nowrap">GRADE CAP RULE${ri===0?' <button id="capadd" class="plus" title="add a cap rule">+</button>':''}</td>
+      <td>${r?`<span class="note">if</span> <input class="${fmClass('if('+(r.cond||'this')+',1,0)')}" data-capcond="${ri}" value="${esc(r.cond||'')}" placeholder="e.g. WAVG(T1,T2,T3,FIN)<50" title="${esc(fmTitle('if('+(r.cond||'this')+',1,0)','a condition over codes — matching students show an orange Raw and are capped'))}" style="width:46%"> <span class="note" style="font-size:10px;white-space:nowrap">→ max course grade</span> <input data-capto="${ri}" value="${r.to??''}" inputmode="decimal" style="width:40px">${isFinite(+r.to)&&r.to!=null&&r.to!==''?` <span class="note" style="font-size:10px">(${letterOf(+r.to)})</span>`:''}`
+      :'<span class="note">policy hurdles — e.g. if HW&lt;40, the grade is at most 45</span>'}</td>
+      <td class="statcol"></td>
+      <td class="pctcol note" title="students this rule caps">${r?(nhit?`${nhit} \u0394`:''):''}</td>
+      <td class="statcol"></td><td class="statcol"></td><td class="statcol"></td><td class="statcol"></td>
+      <td class="xcol">${r?`<button class="x" data-capdel="${ri}" title="remove this cap rule">×</button>`:''}</td></tr>`; }).join('')}
+    <tr><td class="gripcol"></td><td class="ctl"></td><td></td><td>GRADE</td>
+      <td><input class="${fmClass(D.gradeFormula)}" data-gradeform value="${esc(D.gradeFormula||'')}" placeholder="—" title="${esc(fmTitle(D.gradeFormula,'Grade formula (optional) — e.g. ROUND()+BOOST'))}"></td>
+      <td class="pctcol"></td>
+      <td class="statcol"></td>
+      ${statCells(statsOf(D.students.map(st=>{ const t=totals(st); return t?t.grade:null; })))}
+      <td class="xcol"></td></tr>
+    <tr class="totalrow"><td class="gripcol"></td><td class="ctl"></td><td></td><td>TOTAL</td><td>${sumOk?'':'<span class="err">should be 100</span>'}</td><td class="statcol"></td><td class="pctcol${sumOk?'':' err'}">${Math.round(wsum*10)/10}%</td><td class="statcol"></td><td class="statcol"></td><td class="statcol"></td><td class="statcol"></td><td class="xcol"></td></tr></table>
+    <p><input data-schemenotes value="${esc(D.schemeNotes||'')}" placeholder="scheme notes (pass criteria, hurdles, policies — travels with the scheme file)" style="width:100%;border:1px solid var(--shade);padding:4px 8px;color:var(--muted)"></p></div>
+    <div class="ovside">${ovTable}</div></div>`;
   const selRow=sub('In chart',(c,i)=>`<span class="gbck${SERIES.has(c.id)?' on':''}" data-ck="${c.id}"><span class="dot" style="background:${color(i)}"></span></span>`,
     `<td class="gsep gbck${SERIES.has('__total__')?' on':''}" data-ck="__total__"><span class="dot" style="background:#444"></span></td><td></td><td></td><td></td>`);
-  const codeRow=sub('Short code',c=>`<input data-ccode="${c.id}" value="${esc(c.code||'')}" placeholder="—">`,
-    `<td class="gsep"></td><td></td><td></td><td></td>`);
-  const formRow=sub('Formula',c=>`<input data-cform="${c.id}" value="${esc(c.formula||'')}" placeholder="—" title="SCALE(10) · if(this>89,100) · clamp(this,0,100)">`,
-    `<td class="gsep"><input data-rawform value="${esc(D.rawFormula||'')}" placeholder="weighted sum" title="Raw formula"></td><td><input data-gradeform value="${esc(D.gradeFormula||'')}" placeholder="—" title="Grade formula (optional) — e.g. ROUND()+BOOST"></td><td></td><td></td>`);
-  const wsum=D.cols.reduce((a,c)=>a+(+c.weight||0),0);
-  const pctRow=sub('% course grade',c=>`<input data-cw="${c.id}" value="${c.weight??''}" inputmode="decimal">`,
-    `<td class="gsep">${(Math.round(wsum)===100||(!wsum&&(D.rawFormula||D.cols.some(c=>(c.code||'').trim()==='***'))))?'':`<span class="err">Σ ${Math.round(wsum*10)/10}%</span>`}</td><td></td><td></td><td></td>`);
   const avgRow=sub('Average',c=>`<span data-avg="${c.id}"></span>`,
     `<td class="gsep"><span data-avg="__raw__"></span></td><td><span data-avg="__total__"></span></td><td></td><td></td>`);
   const histRow=sub('Histogram',c=>`<span data-hist="${c.id}"></span>`,
     `<td class="gsep"></td><td><span data-hist="__total__"></span></td><td></td><td></td>`);
-  let sup=`<tr><th class="gcat togglable" data-stutog colspan="${rosterN}"><span class="gtog">${STUCOL?'+':'−'}</span> Students</th><th class="gcat" colspan="${Math.max(1,D.cols.length)}">Assessments</th><th class="gcat gsep" colspan="4">${esc(D.code||'Course')} Grade</th></tr>`;
+  const tops=D.cols.filter(c=>!c.parent);
+  const groupThs=tops.map(t=>{
+    const span=DISP.filter(d=>d.c.id===t.id||inSubtree(t.id,d.c)).length;
+    if(!span) return '';
+    const hasKids=kidsOf(t.id).length>0;
+    const tog=hasKids?`<span class="gtog">${COLL.has(t.id)?'+':'−'}</span> `:'';
+    return `<th class="gcat${hasKids?' togglable':''}"${hasKids?` data-tog="${t.id}"`:''} colspan="${span}">${tog}${esc(t.title)}</th>`;
+  }).join('');
+  let sup=`<tr><th class="gcat togglable" data-stutog colspan="${rosterN}"><span class="gtog">${STUCOL?'+':'−'}</span> Students</th>${groupThs||`<th class="gcat">—</th>`}<th class="gcat gsep" colspan="4">Course Grade</th></tr>`;
   let subh=`<tr class="subhead">`+(STUCOL
     ?`<th class="sortable" data-sort="__name__">Name</th>`
-    :`<th class="sortable" data-sort="__name__">Name</th><th class="sortable" data-sort="__snum__">Student #</th><th>Section</th><th></th>`)
-    +D.cols.map((c,i)=>`<th class="sortable${i===0?' gsep':''}" data-sort="${c.id}"><input data-ctitle="${c.id}" value="${esc(c.title)}" style="border:none;background:transparent;font:inherit;text-align:center;width:110px"> <button class="x" data-delcol="${c.id}" title="remove column">×</button></th>`).join('')
+    :`<th class="sortable" data-sort="__name__">Name</th><th class="sortable" data-sort="__snum__">Student #</th><th>Section</th>`)
+    +DISP.map((d,i)=>`<th class="sortable${i===0?' gsep':''}" data-sort="${d.c.id}">${d.computed?`<button class="tri" data-tog="${d.c.id}" style="font-size:13px;padding:0 4px;margin-left:0">${COLL.has(d.c.id)?'▸':'▾'}</button>`:''}${esc(d.c.title)}${d.c.code?` <span class="note">[${esc(d.c.code)}]</span>`:''}</th>`).join('')
     +`<th class="gsep sortable" data-sort="__raw__">Raw</th><th class="sortable" data-sort="__total__">Grade</th><th>Letter</th><th>Note</th></tr>`;
   const body=D.students.map((st,si)=>{
     const tt=totals(st), dnw=dnwOf(st);
@@ -283,18 +619,54 @@ function render(){
       if(fail) return ' class="fail"';
       if(tt.boosted) return ' class="boosted"';
       return ab?' class="atbound"':''; })();
+    const capSrc=new Set();
+    if(tt&&tt.capped) for(const r of tt.capsHit)
+      for(const w of (r.cond.match(/[A-Za-z_][A-Za-z0-9_]*/g)||[])){
+        if(FKEYWORDS.has(w.toLowerCase())) continue;
+        const cc=D.cols.find(c=>(c.code||'').toLowerCase()===w.toLowerCase());
+        if(cc) capSrc.add(cc.id);
+      }
+    const gradeTint=!tt?'':tt.overridden?' ovset':tt.capped?' capd':tt.boosted?' bst':tt.bumped?' bmp':'';
+    const gradeTitle=!tt?'':tt.overridden?(st.ov.__total__.reason||'')+' — click to edit'
+      :tt.capped?`capped by rule: ${tt.capsHit.map(r=>`${r.cond} → at most ${r.to}`).join(' · ')} — click to override`
+      :tt.boosted?'lifted by BOOST — click to override'
+      :tt.bumped?'lifted by a BUMP pair — click to override'
+      :'click to set this student\u2019s course grade (the discretionary cap/fail — reason required)';
+    // identity is locked once a student has a number — inputs exist only so a
+    // hand-added blank row can be filled in; the × lives in the corner of the
+    // student-# cell (or the name cell when the roster is collapsed)
+    const del=`<button class="x xmini" data-delstu="${si}" title="remove student">×</button>`;
     const roster=STUCOL
-      ?`<td>${esc(nameOf(st)||st.snum||'—')}</td>`
-      :`<td><input data-sf="first" data-si="${si}" value="${esc(st.first||'')}" style="border:none;background:transparent;font:inherit;width:90px"></td>
-      <td><input data-sf="snum" data-si="${si}" value="${esc(st.snum||'')}" style="border:none;background:transparent;font:inherit;width:80px"></td>
-      <td><input data-sf="section" data-si="${si}" value="${esc(st.section||'')}" style="border:none;background:transparent;font:inherit;width:50px"></td>
-      <td><button class="x" data-delstu="${si}" title="remove student">×</button></td>`;
+      ?`<td>${del}${esc(nameOf(st)||st.snum||'—')}</td>`
+      :String(st.snum||'').trim()
+      ?`<td>${esc(nameOf(st)||'—')}</td>
+      <td>${del}${esc(st.snum)}</td>
+      <td>${esc(st.section||'')}</td>`
+      :`<td><input data-sf="first" data-si="${si}" value="${esc(st.first||'')}" placeholder="first" style="border:none;background:transparent;font:inherit;width:70px"><input data-sf="last" data-si="${si}" value="${esc(st.last||'')}" placeholder="last" style="border:none;background:transparent;font:inherit;width:70px"></td>
+      <td>${del}<input data-sf="snum" data-si="${si}" value="" placeholder="student #" style="border:none;background:transparent;font:inherit;width:70px"></td>
+      <td><input data-sf="section" data-si="${si}" value="${esc(st.section||'')}" placeholder="sec" style="border:none;background:transparent;font:inherit;width:50px"></td>`;
     return `<tr data-row="${si}">${roster}`
-      +D.cols.map((c,i)=>{ const g=colGrade(st,c); return `<td${i===0?' class="gsep':' class="'}${g!=null&&g<50?' fail':''}"><input class="mark" data-mark="${c.id}" data-si="${si}" value="${st.marks[c.id]??''}"></td>`; }).join('')
-      +`<td class="gsep note">${tt?tt.raw:''}</td><td${cls}>${tt?tt.grade:''}</td><td${cls}>${tt?letterOf(tt.grade):''}</td><td>${dnw?'<span class="dnw">DNW</span>':''}</td></tr>`;
+      +DISP.map((d,i)=>{ const g=colGrade(st,d.c);
+        const ov=st.ov&&st.ov[d.c.id];
+        if(ov){
+          const orig=colGrade(st,d.c,null,true);
+          const tgt=ov.type==='moveto'?(D.cols.find(x=>x.id===ov.to)||{}):null;
+          const txt=ov.type==='exempt'?`— <span class="gbwas">(was ${orig??'—'})</span>`
+            :ov.type==='set'?`${g??'—'} <span class="gbwas">(was ${orig??'—'})</span>`
+            :`${g??'—'} <span class="gbwas">→ ${esc(tgt.code||tgt.title||'?')}</span>`;
+          return `<td class="${ov.type==='set'?'ovset':'ovex'}${i===0?' gsep':''}" data-ovcol="${d.c.id}" data-ovsi="${si}" title="${esc(ov.reason||ov.type)} — click to edit the override">${txt}</td>`;
+        }
+        if(d.computed){
+          const ovIn=st.ov&&subtreeOf(d.c.id).some(k=>st.ov[k.id]);
+          return `<td class="computed gcell${ovIn?' ovin':''}${i===0?' gsep':''}${g!=null&&g<(+d.c.max>0?+d.c.max/2:50)?' fail':''}${capSrc.has(d.c.id)?' capsrc':''}" data-ovcol="${d.c.id}" data-ovsi="${si}" title="${esc(d.c.title)} — folded from its indented components${ovIn?'; CONTAINS AN OVERRIDDEN GRADE':''}; click to override/exempt">${g??'—'}</td>`;
+        }
+        return `<td class="gcell${i===0?' gsep':''}${g!=null&&g<(+d.c.max>0?+d.c.max/2:50)?' fail':''}${capSrc.has(d.c.id)?' capsrc':''}" data-ovcol="${d.c.id}" data-ovsi="${si}" title="click to edit the mark or override it">${st.marks[d.c.id]!=null?Math.round(+st.marks[d.c.id]*100)/100:(g??'—')}</td>`; }).join('')
+      +`<td class="gsep note${tt&&tt.capsHit&&tt.capsHit.length?' ovin':''}"${tt&&tt.capsHit&&tt.capsHit.length?` title="subject to a cap rule: ${esc(tt.capsHit.map(r=>`${r.cond} → at most ${r.to}`).join(' · '))}"`:''}>${tt?tt.raw:''}</td>
+      <td class="gcell${gradeTint}"${!gradeTint&&tt?cls:''} data-ovcol="__total__" data-ovsi="${si}" title="${esc(gradeTitle)}">${tt?(tt.overridden?`${tt.grade} <span class="gbwas">(was ${tt.computed})</span>`:tt.grade):''}</td>
+      <td${cls}>${tt?letterOf(tt.grade):''}</td><td>${dnw?'<span class="dnw">DNW</span>':''}</td></tr>`;
   }).join('');
   document.getElementById('grid').innerHTML=D.cols.length||D.students.length
-    ?`<table id="gbtable"><thead>${selRow}${codeRow}${formRow}${pctRow}${avgRow}${histRow}${sup}${subh}</thead><tbody>${body}</tbody></table>`
+    ?`<table id="gbtable"><thead>${selRow}${avgRow}${histRow}${sup}${subh}</thead><tbody>${body}</tbody></table>`
     :'<p class="note">Nothing here yet — Import CSV, or add a column and a student.</p>';
   refresh();
 }
@@ -311,6 +683,24 @@ function visible(){
     const n=+m[2]; return m[1]==='>'?v>n:m[1]==='>='?v>=n:m[1]==='<'?v<n:m[1]==='<='?v<=n:v===n; });
   const t=q.toLowerCase();
   if(t==='dnw') return D.students.filter(dnwOf);
+  // status words: who got moved by which mechanism
+  const flag={capped:x=>x.capped, bumped:x=>x.bumped&&!x.capped&&!x.overridden,
+              boosted:x=>x.boosted&&!x.capped&&!x.overridden, overridden:x=>x.overridden}[t];
+  if(flag) return D.students.filter(st=>{ const x=totals(st); return x&&flag(x); });
+  // field tests: RAW=45, GRADE>=80, HW<40, T1 40..60 — RAW/GRADE or any code
+  const fm=q.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*(?:(==|>=|<=|=|>|<)\s*(-?\d+(?:\.\d+)?)|(-?\d+(?:\.\d+)?)\s*\.\.\s*(-?\d+(?:\.\d+)?))$/);
+  if(fm){
+    const name=fm[1].toLowerCase();
+    const cc=name!=='raw'&&name!=='grade'&&name!=='total'
+      ?D.cols.find(c=>(c.code||'').toLowerCase()===name):null;
+    if(name==='raw'||name==='grade'||name==='total'||cc){
+      const valOf=st=>{ if(cc) return colGrade(st,cc);
+        const x=totals(st); return x?(name==='raw'?x.raw:x.grade):null; };
+      return D.students.filter(st=>{ const v=valOf(st); if(v==null) return false;
+        if(fm[4]!==undefined) return v>=+fm[4]&&v<=+fm[5];
+        const n=+fm[3],op=fm[2]; return op==='>'?v>n:op==='>='?v>=n:op==='<'?v<n:op==='<='?v<=n:v===n; });
+    }
+  }
   return D.students.filter(st=>nameOf(st).toLowerCase().includes(t)||(st.snum||'').includes(t)||(st.section||'').toLowerCase()===t);
 }
 function buckets(){ if(BUCKET==='LETTER'){ return [[0,50,'F'],[50,55,'D'],[55,60,'C-'],[60,64,'C'],[64,68,'C+'],[68,72,'B-'],[72,76,'B'],[76,80,'B+'],[80,85,'A-'],[85,90,'A'],[90,101,'A+']].map(b=>({lo:b[0],hi:b[1],lbl:b[2]})); }
@@ -349,11 +739,134 @@ function refresh(){
   }
   const PAL=['#6fa8dc','#bda1cb','#93c47d','#e0a800','#76a5af','#c27ba0','#8e7cc3','#dd7e6b','#6aa84f','#a4c2f4','#f6b26b','#999999'];
   const series=[...D.cols.map((c,i)=>({id:c.id,label:c.title,color:PAL[i%PAL.length]})),{id:'__total__',label:'Grade',color:'#444'}].filter(x=>SERIES.has(x.id));
-  const data=series.map(sr=>({sr,counts:bks.map(b=>vis.map(st=>colVal(sr.id,st)).filter(v=>v!=null&&v>=b.lo&&v<b.hi).length)}));
+  /* (chart series ids unchanged — parents chart their folded value) */
+  // with a filter on, the chart keeps the WHOLE cohort as context and picks
+  // out the matching students' share of each bar in gold
+  const isFilt=FILTER.trim()&&vis.length!==D.students.length;
+  const cnt=(list,id,b)=>list.map(st=>colVal(id,st)).filter(v=>v!=null&&v>=b.lo&&v<b.hi).length;
+  const data=series.map(sr=>({sr,
+    counts:bks.map(b=>cnt(isFilt?D.students:vis,sr.id,b)),
+    sel:isFilt?bks.map(b=>cnt(vis,sr.id,b)):null}));
   const mx=Math.max(1,...data.flatMap(d=>d.counts));
-  document.getElementById('chart').innerHTML=(!vis.length||!data.length)
+  document.getElementById('chart').innerHTML=(!D.students.length||!data.length)
     ?'<p class="note">No grades in view yet.</p>'
-    :bks.map((b,i)=>`<div class="bkt"><div class="bars">${data.map(d=>`<span class="bcol" title="${esc(d.sr.label)}: ${d.counts[i]}"><span class="bn">${d.counts[i]||''}</span><span class="bfill" style="height:${Math.round(d.counts[i]/mx*76)+1}px;background:${d.sr.color}"></span></span>`).join('')}</div><span class="bktlbl">${esc(b.lbl)}</span></div>`).join('');
+    :bks.map((b,i)=>`<div class="bkt"><div class="bars">${data.map(d=>{
+      const n=d.counts[i], m=d.sel?d.sel[i]:0;
+      const hpx=Math.round(n/mx*76)+1, gpx=m?Math.min(hpx,Math.round(m/mx*76)+1):0;
+      return `<span class="bcol" title="${esc(d.sr.label)}: ${n}${m?` (${m} match the filter)`:''}"><span class="bn">${n||''}</span><span class="bfill" style="height:${hpx}px;background:${d.sr.color}">${gpx?`<span class="bsel" style="height:${gpx}px"></span>`:''}</span></span>`;
+    }).join('')}</div><span class="bktlbl">${esc(b.lbl)}</span></div>`).join('');
+}
+
+/* SCHEME files: the structure without the people. Loading matches components
+   to existing columns by title (then code) so imported marks snap into the
+   scheme; unmatched components are created; extra columns are left alone. */
+function schemeOf(){
+  return {schemeVersion:1, cols:D.cols.map(c=>({id:c.id,title:c.title,code:c.code||'',formula:c.formula||'',weight:c.weight??null,max:c.max??null,parent:c.parent||null})),
+          rawFormula:D.rawFormula||'', gradeFormula:D.gradeFormula||'', notes:D.schemeNotes||'',
+          capRules:(D.capRules||[]).map(r=>({cond:r.cond||'',to:r.to??null}))};
+}
+function schemeText(){
+  const L=['# gradebook scheme — indent = hierarchy; fields: code | title | formula | weight% | max'];
+  if(D.rawFormula) L.push('raw: '+D.rawFormula);
+  if(D.gradeFormula) L.push('grade: '+D.gradeFormula);
+  for(const r of (D.capRules||[])) if(r.cond) L.push('cap: '+r.cond+' -> '+(r.to??''));
+  if(D.schemeNotes) L.push('notes: '+D.schemeNotes);
+  for(const st of D.students){ for(const [k,ov] of Object.entries(st.ov||{})){
+    const who=(st.snum||'').trim()||nameOf(st); if(!who) continue;
+    let what=null;
+    if(k==='__total__'){ if(ov.type==='set') what='Course grade -> '+ov.value; }
+    else{ const c=D.cols.find(x=>x.id===k); if(!c) continue; const code=c.code||c.title;
+      if(ov.type==='set') what=code+' -> '+ov.value;
+      else if(ov.type==='exempt') what=code+' exempt';
+      else if(ov.type==='moveto'){ const t=D.cols.find(x=>x.id===ov.to); what=code+' weight -> '+(t?(t.code||t.title):'?'); } }
+    if(what) L.push('exception: '+who+' | '+what+(ov.reason?' | '+ov.reason:''));
+  }}
+  L.push('');
+  const walk=(parent,depth)=>{ for(const c of D.cols.filter(x=>(x.parent||null)===parent)){
+    const f=[c.code||'',c.title||'',c.formula||'',c.weight!=null?c.weight+'%':'',c.max!=null?'max '+c.max:''];
+    while(f.length&&!f[f.length-1]) f.pop();
+    L.push('  '.repeat(depth)+f.join(' | '));
+    walk(c.id,depth+1); } };
+  walk(null,0);
+  return L.join('\n')+'\n';
+}
+function parseSchemeText(txt){
+  const sch={schemeVersion:1,cols:[],rawFormula:'',gradeFormula:'',notes:'',capRules:[],exceptions:[]};
+  const stack=[]; let n=0;
+  for(const line of txt.split(/\r?\n/)){
+    if(!line.trim()||/^\s*#/.test(line)) continue;
+    const dm=/^(raw|grade|notes|cap|exception)\s*:\s*(.*)$/i.exec(line.trim());
+    if(dm){ const k=dm[1].toLowerCase(), v=dm[2].trim();
+      if(k==='raw') sch.rawFormula=v;
+      else if(k==='grade') sch.gradeFormula=v;
+      else if(k==='notes') sch.notes=v;
+      else if(k==='cap'){ const cm=/^(.*?)(?:->|\u2192)\s*(-?[\d.]+)\s*$/.exec(v);
+            if(cm) sch.capRules.push({cond:cm[1].trim(),to:+cm[2]}); }
+      else{ const seg=v.split('|').map(x=>x.trim());
+            if(seg.length>=2) sch.exceptions.push({who:seg[0],what:seg[1].replace(/\u2192/g,'->'),reason:seg[2]||''}); }
+      continue; }
+    const depth=Math.round(/^[ \t]*/.exec(line)[0].replace(/\t/g,'  ').length/2);
+    const [code='',title='',formula='',wRaw='',mRaw='']=line.trim().split('|').map(x=>x.trim());
+    if(!code&&!title) continue;
+    const w=wRaw?parseFloat(wRaw.replace('%','')):NaN;
+    const mm=/([\d.]+)/.exec(mRaw||'');
+    while(stack.length&&stack[stack.length-1].depth>=depth) stack.pop();
+    const id='s'+(++n);
+    sch.cols.push({id,title:title||code,code,formula,weight:isFinite(w)?w:null,
+                   max:mm&&+mm[1]>0?+mm[1]:null,parent:stack.length?stack[stack.length-1].id:null});
+    stack.push({depth,id});
+  }
+  if(!sch.cols.length) throw new Error('no components found');
+  return sch;
+}
+function applyScheme(sch){
+  if(!sch||!Array.isArray(sch.cols)) throw new Error('not a scheme file');
+  const norm=t=>String(t||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  const idMap={}, used=new Set();
+  // codes are the real handles, so match on them FIRST; titles are the
+  // fallback — and each existing column may be claimed by only ONE scheme
+  // line, else 'TUTORIAL BONUS' and 'Tutorial Bonus' (same normalized title)
+  // both grab the same column and the tree mangles
+  for(const sc of sch.cols){
+    let c=(sc.code&&D.cols.find(x=>!used.has(x.id)&&(x.code||'').toLowerCase()===String(sc.code).toLowerCase()))
+         ||D.cols.find(x=>!used.has(x.id)&&norm(x.title)===norm(sc.title));
+    if(!c){ c={id:uid(),title:sc.title,code:'',formula:'',weight:null,parent:null}; D.cols.push(c); }
+    used.add(c.id); idMap[sc.id]=c.id;
+    c.title=sc.title; c.code=sc.code||''; c.formula=sc.formula||''; c.weight=sc.weight??null; c.max=(+sc.max>0)?+sc.max:null;
+  }
+  for(const sc of sch.cols){ const c=D.cols.find(x=>x.id===idMap[sc.id]);
+    c.parent=sc.parent!=null?(idMap[sc.parent]||null):null;
+    if(c.parent===c.id) c.parent=null; }
+  const ordered=sch.cols.map(sc=>D.cols.find(x=>x.id===idMap[sc.id]));
+  D.cols=[...ordered, ...D.cols.filter(x=>!ordered.includes(x))];
+  collapseAll();
+  fillCodes(D.cols);   // scheme lines may omit codes — every component gets
+                       // its generated handle NOW, so formulas like +or(TB,0)
+                       // and the exception lines below can resolve
+  D.rawFormula=sch.rawFormula||''; D.gradeFormula=sch.gradeFormula||'';
+  if(sch.notes!=null) D.schemeNotes=sch.notes;
+  if(Array.isArray(sch.capRules)) D.capRules=sch.capRules.map(r=>({cond:r.cond||'',to:r.to??null}));
+  if(Array.isArray(sch.exceptions)&&sch.exceptions.length){
+    const byCode=w=>D.cols.find(x=>(x.code||'').toLowerCase()===w.toLowerCase())
+                  ||D.cols.find(x=>x.title.toLowerCase()===w.toLowerCase());
+    let missed=0;
+    for(const ex of sch.exceptions){
+      const st=D.students.find(s=>(s.snum||'').trim()===ex.who)
+             ||D.students.find(s=>nameOf(s).toLowerCase()===ex.who.toLowerCase());
+      if(!st){ missed++; continue; }
+      let m;
+      if(m=/^course\s*grade\s*->\s*(-?[\d.]+)$/i.exec(ex.what))
+        (st.ov=st.ov||{}).__total__={type:'set',value:+m[1],reason:ex.reason};
+      else if(m=/^(.+?)\s+exempt$/i.exec(ex.what)){ const c=byCode(m[1]);
+        if(c) (st.ov=st.ov||{})[c.id]={type:'exempt',reason:ex.reason}; else missed++; }
+      else if(m=/^(.+?)\s+weight\s*->\s*(.+)$/i.exec(ex.what)){ const c=byCode(m[1].trim()),t=byCode(m[2].trim());
+        if(c&&t) (st.ov=st.ov||{})[c.id]={type:'moveto',to:t.id,reason:ex.reason}; else missed++; }
+      else if(m=/^(.+?)\s*->\s*(-?[\d.]+)$/i.exec(ex.what)){ const c=byCode(m[1].trim());
+        if(c) (st.ov=st.ov||{})[c.id]={type:'set',value:+m[2],reason:ex.reason}; else missed++; }
+      else missed++;
+    }
+    if(missed) alert(missed+' exception line(s) could not be applied — student or component not found (import marks first, then the scheme).');
+  }
 }
 
 /* the *** gesture CONCRETIZES: auto-name the column from its title (unique
@@ -400,8 +913,9 @@ function importCSV(text){
   const gradeCols=head.map((h,i)=>({h,i})).filter(x=>!skip.has(x.i)&&x.h);
   for(const gc of gradeCols){
     if(!D.cols.some(c=>norm(c.title)===norm(gc.h)))
-      D.cols.push({id:uid(),title:gc.h,code:'',formula:'',weight:null});
+      D.cols.push({id:uid(),title:gc.h,code:'',formula:'',weight:null,parent:null});
   }
+  fillCodes(D.cols);
   let added=0,updated=0;
   for(const r of rows.slice(1)){
     const snum=(r[si]||'').trim(); if(!snum) continue;
@@ -427,23 +941,85 @@ function importCSV(text){
   alert(`${added} students added, ${updated} updated, ${gradeCols.length} assessment columns.`);
 }
 
-/* ════ Workday export (the SIS grammar) ════ */
-function workdayPeriod(label){
-  const m=/(\d{4})\s*([wsa])\s*(\d+)?/i.exec(label||''); if(!m) return label||'';
-  const y=+m[1],sess=m[2].toLowerCase(),t=m[3]||'1';
-  if(sess==='w') return `${y}-${String((y+1)%100).padStart(2,'0')} Winter Term ${t} (UBC-V)`;
-  if(sess==='s') return `${y} Summer Term ${t} (UBC-V)`;
-  return `${y} Term ${t} (UBC-V)`;
+/* ════ a minimal .xlsx writer — an xlsx is a ZIP of XML; Workday's upload
+   tool refuses CSV, so we build the real thing: stored (uncompressed) zip,
+   one sheet, inline strings; numbers stay numbers, ids stay text ════ */
+const CRC_T=(()=>{ const t=new Uint32Array(256);
+  for(let n=0;n<256;n++){ let c=n; for(let k=0;k<8;k++) c=c&1?0xEDB88320^(c>>>1):c>>>1; t[n]=c>>>0; }
+  return t; })();
+function crc32(u8){ let c=0xFFFFFFFF;
+  for(let i=0;i<u8.length;i++) c=CRC_T[(c^u8[i])&0xFF]^(c>>>8);
+  return (c^0xFFFFFFFF)>>>0; }
+function zipStore(files){                     // [{name, data:Uint8Array}]
+  const enc=new TextEncoder(); const chunks=[]; const central=[]; let off=0;
+  const u16=v=>[v&255,(v>>8)&255], u32=v=>[v&255,(v>>8)&255,(v>>16)&255,(v>>>24)&255];
+  for(const f of files){
+    const name=enc.encode(f.name), crc=crc32(f.data);
+    const head=new Uint8Array([0x50,0x4B,3,4, ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0),
+      ...u32(crc), ...u32(f.data.length), ...u32(f.data.length), ...u16(name.length), ...u16(0)]);
+    chunks.push(head,name,f.data);
+    central.push({name,crc,size:f.data.length,off});
+    off+=head.length+name.length+f.data.length;
+  }
+  const cdStart=off; let cdLen=0;
+  for(const c of central){
+    const rec=new Uint8Array([0x50,0x4B,1,2, ...u16(20), ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0),
+      ...u32(c.crc), ...u32(c.size), ...u32(c.size), ...u16(c.name.length), ...u16(0), ...u16(0),
+      ...u16(0), ...u16(0), ...u32(0), ...u32(c.off)]);
+    chunks.push(rec,c.name); cdLen+=rec.length+c.name.length;
+  }
+  chunks.push(new Uint8Array([0x50,0x4B,5,6, ...u16(0), ...u16(0), ...u16(central.length), ...u16(central.length),
+    ...u32(cdLen), ...u32(cdStart), ...u16(0)]));
+  let total=0; for(const c of chunks) total+=c.length;
+  const out=new Uint8Array(total); let q=0;
+  for(const c of chunks){ out.set(c,q); q+=c.length; }
+  return out;
 }
+const xesc=t=>String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+// a default short code from a title: initials (Learning Logs 3 -> LL3),
+// uniquified against the codes already taken
+function genCode(title,taken){
+  let g=(String(title).match(/[A-Za-z0-9]+/g)||['C']).map(w=>/^\d+$/.test(w)?w:w[0]).join('').toUpperCase().slice(0,10);
+  if(g.replace(/\d/g,'').length<1) g='C'+g;
+  let out=g,n=1;
+  while(taken.has(out)) out=g+(++n);
+  taken.add(out);
+  return out;
+}
+function fillCodes(cols){
+  const taken=new Set(cols.map(c=>(c.code||'').toUpperCase()).filter(Boolean));
+  cols.forEach(c=>{ if(!c.code) c.code=genCode(c.title,taken); });
+}
+function xlsxOf(rows){                        // rows: arrays of strings/numbers
+  const colL=i=>{ let n=i+1,r=''; while(n){ r=String.fromCharCode(64+((n-1)%26+1))+r; n=Math.floor((n-1)/26); } return r; };
+  const body=rows.map((r,ri)=>`<row r="${ri+1}">`+r.map((v,ci)=>
+    (typeof v==='number'&&isFinite(v))
+      ?`<c r="${colL(ci)}${ri+1}" t="n"><v>${v}</v></c>`
+      :`<c r="${colL(ci)}${ri+1}" t="inlineStr"><is><t xml:space="preserve">${xesc(v??'')}</t></is></c>`
+  ).join('')+'</row>').join('');
+  const enc=new TextEncoder();
+  const files=[
+    {name:'[Content_Types].xml',data:enc.encode('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>')},
+    {name:'_rels/.rels',data:enc.encode('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>')},
+    {name:'xl/workbook.xml',data:enc.encode('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Grades" sheetId="1" r:id="rId1"/></sheets></workbook>')},
+    {name:'xl/_rels/workbook.xml.rels',data:enc.encode('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>')},
+    {name:'xl/worksheets/sheet1.xml',data:enc.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${body}</sheetData></worksheet>`)},
+  ];
+  return zipStore(files);
+}
+
+/* ════ Workday export (the SIS grammar) ════ */
+
 function exportWD(){
   const subj=D.subject||'', num=D.number||'';
   const rows=[['Student Id','Student Preferred Name','Student Last Name','Grade','Grade Note','Academic Period','Course Subject Code','Course Number','Section Number','Status','Updated By']];
   for(const st of D.students){ const t=totals(st);
-    rows.push([st.snum||'',st.first||'',st.last||'',t?String(t.grade):'',dnwOf(st)?'DNW':'',workdayPeriod(D.term),subj,num,st.section||D.section||'','','']); }
-  const csv='﻿'+rows.map(r=>r.map(v=>/[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v).join(',')).join('\r\n');
+    rows.push([st.snum||'',st.first||'',st.last||'',t?t.grade:'',dnwOf(st)?'DNW':'',(D.term||'').trim(),subj,num,st.section||D.section||'','','']); }
+  // Workday's upload tool accepts ONLY Excel files — so it gets a real one
+  // (grades as numbers; student ids as text, protecting leading zeros)
   const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
-  a.download=(((D.subject||'')+(D.number||''))||'course')+'_grade_records.csv';
+  a.href=URL.createObjectURL(new Blob([xlsxOf(rows)],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+  a.download=(((D.subject||'')+(D.number||''))||'course')+'_grade_records.xlsx';
   a.click(); URL.revokeObjectURL(a.href);
 }
 
@@ -464,8 +1040,12 @@ document.addEventListener('change',e=>{
     else c.formula=t.value.trim();
     save(); render(); return; }
   if(d.cw!==undefined){ const c=D.cols.find(c=>c.id===d.cw); const v=parseFloat(t.value); c.weight=isFinite(v)?v:null; save(); render(); return; }
+  if(d.cmax!==undefined){ const c=D.cols.find(c=>c.id===d.cmax); const v=parseFloat(t.value); c.max=v>0?v:null; save(); render(); return; }
   if(d.rawform!==undefined){ D.rawFormula=t.value.trim(); save(); render(); return; }
   if(d.gradeform!==undefined){ D.gradeFormula=t.value.trim(); save(); render(); return; }
+  if(d.schemenotes!==undefined){ D.schemeNotes=t.value.trim(); save(); return; }
+  if(d.capcond!==undefined){ (D.capRules=D.capRules||[])[+d.capcond].cond=t.value.trim(); save(); render(); return; }
+  if(d.capto!==undefined){ (D.capRules=D.capRules||[])[+d.capto].to=parseFloat(t.value); save(); render(); return; }
   if(t.id==='fsubj'){ D.subject=t.value.trim(); save(); refresh(); return; }
   if(t.id==='fnum'){ D.number=t.value.trim(); save(); refresh(); return; }
   if(t.id==='fsec'){ D.section=t.value.trim(); save(); return; }
@@ -474,16 +1054,99 @@ document.addEventListener('change',e=>{
 
 });
 document.getElementById('filter').addEventListener('input',e=>{ FILTER=e.target.value; refresh(); });
+// ── per-cell override popover (LMS1): Unchanged / Exempt / Set / Move weight
+//    to — with a reason. Right-click any mark or fold; click an overridden
+//    cell to edit. The course RAW/GRADE columns are not overridable (move the
+//    total by adjusting its components). ──
+function openOverride(colId,si){
+  document.getElementById('ovpop')?.remove();
+  const isTotal=colId==='__total__';
+  const c=isTotal?{title:'Course grade'}:D.cols.find(x=>x.id===colId), st=D.students[si]; if(!c||!st) return;
+  const ov=(st.ov&&st.ov[colId])||{};
+  const leaf=!isTotal&&!kidsOf(colId).length;
+  const others=D.cols.filter(x=>x.id!==colId);
+  const wrap=document.createElement('div'); wrap.id='ovpop';
+  wrap.innerHTML=`<div class="ovcard">
+    <div style="display:flex;justify-content:space-between"><b>${esc(c.title)} · ${esc(nameOf(st)||st.snum)}</b><a href="#" class="link" id="ovx">cancel</a></div>
+    ${leaf?`<label>Mark <input type="text" id="ovmark" value="${st.marks[colId]??''}" placeholder="blank = not graded" style="width:110px"></label><hr style="border:none;border-top:1px solid var(--shade)">`:''}
+    <label><input type="radio" name="ovact" value="none"${!ov.type?' checked':''}> No override</label>
+    ${isTotal?'':`<label><input type="radio" name="ovact" value="exempt"${ov.type==='exempt'?' checked':''}> Exempt — weight moves to the remaining components</label>`}
+    <label><input type="radio" name="ovact" value="set"${ov.type==='set'?' checked':''}> Replace the grade with <input type="text" id="ovval" value="${ov.type==='set'?ov.value:''}" placeholder="%" style="width:70px"></label>
+    ${isTotal?'':`<label><input type="radio" name="ovact" value="moveto"${ov.type==='moveto'?' checked':''}> Move weight to <select id="ovto">${others.map(o=>`<option value="${o.id}"${ov.to===o.id?' selected':''}>${esc(o.code?o.code+' — ':'')}${esc(o.title)}</option>`).join('')}</select></label>`}
+    <label>Reason <input type="text" id="ovreason" value="${esc(ov.reason||'')}" placeholder="REQUIRED for any override"></label>
+    <p><button id="ovapply">Apply</button></p></div>`;
+  const close=()=>wrap.remove();
+  wrap.addEventListener('click',ev=>{ if(ev.target===wrap||ev.target.id==='ovx'){ ev.preventDefault(); close(); } });
+  wrap.querySelector('#ovval').addEventListener('focus',()=>{ wrap.querySelector('input[value="set"]').checked=true; });
+  wrap.querySelector('#ovto')?.addEventListener('focus',()=>{ wrap.querySelector('input[value="moveto"]').checked=true; });
+  wrap.querySelector('#ovapply').addEventListener('click',()=>{
+    const act=wrap.querySelector('input[name="ovact"]:checked').value;
+    const reason=wrap.querySelector('#ovreason').value.trim();
+    if(act!=='none'&&!reason){ wrap.querySelector('#ovreason').focus(); return; }   // no silent overrides
+    const mk=wrap.querySelector('#ovmark');
+    if(mk){ const v=mk.value.trim();
+      if(v===''){ delete st.marks[colId]; }
+      else if(isFinite(+v)) st.marks[colId]=+v;
+      else { alert('marks are numbers (or blank)'); return; } }
+    st.ov=st.ov||{};
+    if(act==='none') delete st.ov[colId];
+    else if(act==='exempt') st.ov[colId]={type:'exempt',reason};
+    else if(act==='set'){ const v=parseFloat(wrap.querySelector('#ovval').value);
+      if(!isFinite(v)){ wrap.querySelector('#ovval').focus(); return; }
+      st.ov[colId]={type:'set',value:v,reason}; }
+    else if(act==='moveto'){ const to=wrap.querySelector('#ovto').value;
+      if(!to||to===colId) return;
+      st.ov[colId]={type:'moveto',to,reason}; }
+    if(!Object.keys(st.ov).length) delete st.ov;
+    close(); save(); render();
+  });
+  document.body.appendChild(wrap);
+}
+document.addEventListener('contextmenu',e=>{
+  const td=e.target.closest?.('td[data-ovcol]'); if(!td) return;
+  e.preventDefault(); openOverride(td.dataset.ovcol,+td.dataset.ovsi);
+});
+document.addEventListener('click',e=>{
+  const t=e.target.closest?.('td.ovset[data-ovcol],td.ovex[data-ovcol],td.gcell[data-ovcol],tr[data-ovcol]');
+  if(!t) return;
+  openOverride(t.dataset.ovcol,+t.dataset.ovsi);
+});
+// drag the ≡ grip onto another calculation row to reorder (a parent moves
+// with its children; a row dropped on a child joins that child's parent)
+let DRAG=null;
+document.addEventListener('dragstart',e=>{ const g=e.target.closest?.('.grip'); if(g){ DRAG=g.dataset.drag; e.dataTransfer.effectAllowed='move'; } });
+document.addEventListener('dragend',()=>{ DRAG=null; });
+document.addEventListener('dragover',e=>{ if(!DRAG) return; const tr=e.target.closest?.('tr[data-cid]'); if(tr&&tr.dataset.cid!==DRAG){ e.preventDefault(); tr.classList.add('dragover'); } });
+document.addEventListener('dragleave',e=>{ e.target.closest?.('tr.dragover')?.classList.remove('dragover'); });
+document.addEventListener('drop',e=>{
+  if(!DRAG) return;
+  const tr=e.target.closest?.('tr[data-cid]'); if(!tr) return;
+  e.preventDefault(); tr.classList.remove('dragover');
+  const drag=D.cols.find(x=>x.id===DRAG), tgt=D.cols.find(x=>x.id===tr.dataset.cid);
+  DRAG=null;
+  if(!drag||!tgt||drag===tgt||inSubtree(drag.id,tgt)) return;   // never into your own subtree
+  moveBlock(drag,tgt.parent||null,D.cols.indexOf(tgt));         // before the target, at its level
+  save(); SERIES=null; render();
+});
 document.getElementById('jsonfile').addEventListener('change',e=>{
   const f=e.target.files[0]; if(!f) return;
   const r=new FileReader();
   r.onerror=()=>alert('Could not read that file.');
-  r.onload=()=>{ try{ const d=JSON.parse(r.result);
+  r.onload=()=>{ try{ const d=sanitize(JSON.parse(r.result));
       if(!d||!Array.isArray(d.cols)||!Array.isArray(d.students)) throw new Error('not a gradebook data file');
-      D=d; save(); SERIES=null; render();
+      D=d; collapseAll(); save(); SERIES=null; render();
     }catch(err){ alert('Load failed: '+err.message); } };
   r.readAsText(f);
   e.target.value='';
+});
+document.getElementById('schfile').addEventListener('change',e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onerror=()=>alert('Could not read that file.');
+  r.onload=()=>{ try{ const t=String(r.result);
+      applyScheme(t.trim().startsWith('{')?JSON.parse(t):parseSchemeText(t)); save(); SERIES=null; render(); }
+    catch(err){ alert('Scheme load failed: '+err.message); } };
+  r.readAsText(f); e.target.value='';
 });
 document.getElementById('csvfile').addEventListener('change',e=>{
   const f=e.target.files[0]; if(!f) return;
@@ -498,9 +1161,33 @@ document.addEventListener('click',e=>{
   const ck=e.target.closest('[data-ck]');
   if(ck){ const id=ck.dataset.ck; SERIES.has(id)?SERIES.delete(id):SERIES.add(id); ck.classList.toggle('on'); refresh(); return; }
   const dc=e.target.closest('[data-delcol]');
-  if(dc){ if(!confirm('Remove this column and its marks?')) return;
-    D.cols=D.cols.filter(c=>c.id!==dc.dataset.delcol);
-    D.students.forEach(st=>delete st.marks[dc.dataset.delcol]); save(); SERIES=null; render(); return; }
+  if(dc){ if(!confirm('Remove this component?')) return;
+    const id=dc.dataset.delcol;
+    D.cols.forEach(x=>{ if(x.parent===id) x.parent=null; });   // children step up
+    D.cols=D.cols.filter(c=>c.id!==id);
+    D.students.forEach(st=>delete st.marks[id]); save(); SERIES=null; render(); return; }
+  const tog=e.target.closest('[data-tog]');
+  if(tog){ const id=tog.dataset.tog; COLL.has(id)?COLL.delete(id):COLL.add(id); render(); return; }
+  const ind=e.target.closest('[data-ind]');
+  if(ind){ const c=D.cols.find(x=>x.id===ind.dataset.ind);
+    const sibs=D.cols.filter(x=>(x.parent||null)===(c.parent||null));
+    const prevSib=sibs[sibs.indexOf(c)-1];
+    if(prevSib){
+      // depth-only: c already sits right after prevSib's block, so becoming
+      // its last child changes NOTHING visually except the indentation
+      c.parent=prevSib.id;
+      COLL.delete(prevSib.id);           // never indent into an invisible place
+      save(); SERIES=null; render(); }
+    return; }
+  const out=e.target.closest('[data-out]');
+  if(out){ const c=D.cols.find(x=>x.id===out.dataset.out);
+    const parent=D.cols.find(x=>x.id===c.parent); if(!parent) return;
+    // depth-only: later siblings become c's children (they already sit after
+    // it), so the visual order is untouched — only depths change
+    const sibs=D.cols.filter(x=>x.parent===parent.id);
+    sibs.slice(sibs.indexOf(c)+1).forEach(x=>{ x.parent=c.id; });
+    c.parent=parent.parent||null;
+    save(); SERIES=null; render(); return; }
   const ds=e.target.closest('[data-delstu]');
   if(ds){ if(!confirm('Remove this student?')) return; D.students.splice(+ds.dataset.delstu,1); save(); render(); return; }
   const so=e.target.closest('th.sortable');
@@ -511,9 +1198,24 @@ document.addEventListener('click',e=>{
       if(typeof va==='string'||typeof vb==='string') return String(va??'').localeCompare(String(vb??''))*(SORT.asc?1:-1);
       va=va==null?-Infinity:va; vb=vb==null?-Infinity:vb; return (va-vb)*(SORT.asc?1:-1); });
     save(); render(); return; }
-  if(e.target.id==='addcol'){ D.cols.push({id:uid(),title:'New assessment',code:'',formula:'',weight:null}); save(); SERIES=null; render(); return; }
+  if(e.target.id==='capadd'){ (D.capRules=D.capRules||[]).push({cond:'',to:50}); save(); render(); return; }
+  const cd=e.target.closest('[data-capdel]');
+  if(cd){ D.capRules.splice(+cd.dataset.capdel,1); save(); render(); return; }
+  if(e.target.id==='addcol'){
+    const c={id:uid(),title:'New component',code:'',formula:'',weight:null,parent:null};
+    fillCodes([...D.cols,c]);
+    D.cols.unshift(c);                     // born at the TOP, right where the + lives
+    save(); SERIES=null; render();
+    const inp=document.querySelector(`input[data-ctitle="${c.id}"]`);
+    if(inp){ inp.focus(); inp.select(); }  // and ready to be named
+    return; }
   if(e.target.id==='addstu'){ D.students.push({snum:'',first:'',last:'',section:'',marks:{}}); save(); render(); return; }
   if(e.target.id==='importbtn'){ document.getElementById('csvfile').click(); return; }
+  if(e.target.id==='schdl'){ const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([schemeText()],{type:'text/plain'}));
+    a.download=(((D.subject||'')+(D.number||''))||'course')+'.scheme.txt';
+    a.click(); URL.revokeObjectURL(a.href); return; }
+  if(e.target.id==='schload'){ document.getElementById('schfile').click(); return; }
   if(e.target.id==='dl'){ const a=document.createElement('a');
     a.href=URL.createObjectURL(new Blob([JSON.stringify(D)],{type:'application/json'}));
     a.download=(((D.subject||'')+(D.number||''))||'gradebook')+'_gradebook.json';
@@ -523,6 +1225,7 @@ document.addEventListener('click',e=>{
   if(e.target.id==='wipe'){ if(!confirm('Erase EVERYTHING stored in this browser for this gradebook?')) return;
     localStorage.removeItem(KEY); D={subject:'',number:'',section:'',term:'',cols:[],students:[],rawFormula:'',gradeFormula:''}; SERIES=null; render(); return; }
 });
+collapseAll();
 render();
 </script>
 </body>
