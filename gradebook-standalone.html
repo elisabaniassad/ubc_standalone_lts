@@ -95,6 +95,8 @@
   table.ovtable tr[data-ovcol]:hover td { background:var(--shade); }
   #gbtable td.gcell { cursor:pointer; }
   #gbtable td.gcell:hover { background:var(--shade); }
+  #gbtable tbody tr:hover td { background:#fbf7e3; }                 /* highlight the hovered student's row */
+  #gbtable tbody tr:hover td:first-child { background:#fbf7e3; }
   table.scheme th, table.scheme td { border:1px solid var(--line); text-align:left; overflow:hidden; }
   table.scheme th { background:#d8e9f6; }   /* the scheme header: pale blue */
   table.scheme th.pctcol, table.scheme td.pctcol { width:7%; text-align:center; white-space:nowrap; }
@@ -770,11 +772,16 @@ function render(){
         if(cc) capSrc.add(cc.id);
       }
     const gradeTint=!tt?'':tt.overridden?' ovset':tt.capped?' capd':tt.boosted?' bst':tt.bumped?' bmp':'';
-    const gradeTitle=!tt?'':tt.overridden?(st.ov.__total__.reason||'')+' — click to edit'
-      :tt.capped?`capped by rule: ${tt.capsHit.map(r=>`${r.cond} → at most ${r.to}`).join(' · ')} — click to override`
-      :tt.boosted?'lifted by BOOST — click to override'
-      :tt.bumped?'lifted by a BUMP pair — click to override'
-      :'click to set this student\u2019s course grade (the discretionary cap/fail — reason required)';
+    const gradeTitle=(()=>{ if(!tt) return '';
+      if(tt.overridden) return `manually set to ${tt.grade} (computed ${tt.computed})${st.ov.__total__.reason?': '+st.ov.__total__.reason:''} — click to edit`;
+      const fx=[];
+      if(tt.bumped) fx.push(`bumped by “${D.boostFormula}”`);
+      if(tt.boosted) fx.push(`boosted by “${D.boostFormula}”`);
+      for(const c of (tt.capsHit||[])) fx.push(`capped by “${c.cond}” → at most ${c.to}`);
+      if((D.gradeFormula||'').trim() && !tt.bumped && !tt.boosted) fx.push(`grade formula “${D.gradeFormula}”`);
+      const head=`raw ${tt.raw} → grade ${tt.grade}`;
+      return (fx.length?`${head} — affected by: ${fx.join('; ')}. `:`${head}. `)+'click to override';
+    })();
     // identity is locked once a student has a number — inputs exist only so a
     // hand-added blank row can be filled in; the × lives in the corner of the
     // student-# cell (or the name cell when the roster is collapsed)
@@ -801,7 +808,7 @@ function render(){
         }
         if(d.computed){
           const ovIn=st.ov&&subtreeOf(d.c.id).some(k=>st.ov[k.id]);
-          return `<td class="computed gcell${ovIn?' ovin':''}${i===0?' gsep':''}${g!=null&&g<(+d.c.max>0?+d.c.max/2:50)?' fail':''}${capSrc.has(d.c.id)?' capsrc':''}" data-ovcol="${d.c.id}" data-ovsi="${si}" title="${esc(d.c.title)} — folded from its indented components${ovIn?'; CONTAINS AN OVERRIDDEN GRADE':''}; click to override/exempt">${g??'—'}</td>`;
+          return `<td class="computed gcell${ovIn?' ovin':''}${i===0?' gsep':''}${g!=null&&g<(+d.c.max>0?+d.c.max/2:50)?' fail':''}${capSrc.has(d.c.id)?' capsrc':''}" data-ovcol="${d.c.id}" data-ovsi="${si}" title="${esc(d.c.title)} — folded from its indented components${d.c.formula?` by “${esc(d.c.formula)}”`:''}${ovIn?'; CONTAINS AN OVERRIDDEN GRADE':''}; click to override/exempt">${g??'—'}</td>`;
         }
         return `<td class="gcell${i===0?' gsep':''}${g!=null&&g<(+d.c.max>0?+d.c.max/2:50)?' fail':''}${capSrc.has(d.c.id)?' capsrc':''}" data-ovcol="${d.c.id}" data-ovsi="${si}" title="click to edit the mark or override it">${st.marks[d.c.id]!=null?Math.round(+st.marks[d.c.id]*100)/100:(g??'—')}</td>`; }).join('')
       +`<td class="gsep note${tt&&tt.capsHit&&tt.capsHit.length?' ovin':''}"${tt&&tt.capsHit&&tt.capsHit.length?` title="subject to a cap rule: ${esc(tt.capsHit.map(r=>`${r.cond} → at most ${r.to}`).join(' · '))}"`:''}>${tt?tt.raw:''}</td>
