@@ -565,7 +565,7 @@ function render(){
     ${((D.capRules||[]).length?D.capRules:[null]).map((r,ri)=>{
       const nhit=r?D.students.filter(st=>{ const t=totals(st); return t&&t.capsHit.includes(r); }).length:0;
       return `<tr><td class="gripcol"></td><td class="ctl"></td><td></td>
-      <td class="note">CAP${ri===0?' <button id="capadd" class="plus" title="add a cap rule">+</button>':''}</td>
+      <td class="note" style="white-space:nowrap">GRADE CAP RULE${ri===0?' <button id="capadd" class="plus" title="add a cap rule">+</button>':''}</td>
       <td>${r?`<span class="note">if</span> <input class="${fmClass('if('+(r.cond||'this')+',1,0)')}" data-capcond="${ri}" value="${esc(r.cond||'')}" placeholder="e.g. WAVG(T1,T2,T3,FIN)<50" title="${esc(fmTitle('if('+(r.cond||'this')+',1,0)','a condition over codes — matching students show an orange Raw and are capped'))}" style="width:46%"> <span class="note" style="font-size:10px;white-space:nowrap">→ max course grade</span> <input data-capto="${ri}" value="${r.to??''}" inputmode="decimal" style="width:40px">${isFinite(+r.to)&&r.to!=null&&r.to!==''?` <span class="note" style="font-size:10px">(${letterOf(+r.to)})</span>`:''}`
       :'<span class="note">policy hurdles — e.g. if HW&lt;40, the grade is at most 45</span>'}</td>
       <td class="pctcol note">${r?(nhit?`${nhit} hit`:''):''}</td>
