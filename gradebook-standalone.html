@@ -706,7 +706,7 @@ function render(){
   D.students.forEach((st,si)=>{ for(const [colId,ov] of Object.entries(st.ov||{})){
     if(colId==='__total__'){
       const t=totals(st);
-      ovRows.push(`<tr data-ovcol="__total__" data-ovsi="${si}" title="click to edit"><td>${esc(st.snum||nameOf(st)||'?')}</td><td>${esc(`Course grade: ${t?t.computed:'—'} → ${ov.type==='formula'?`“${ov.value}” = ${t?t.grade:'—'}`:ov.value}`)}</td><td>${esc(ov.reason||'')}</td></tr>`);
+      ovRows.push(`<tr data-ovcol="__total__" data-ovsi="${si}" title="click to edit"><td>${esc(nameOf(st)||st.snum||'?')}${st.snum?` <span class="note" style="font-style:italic;font-size:10px">(${esc(st.snum)})</span>`:''}</td><td>${esc(`Course grade: ${t?t.computed:'—'} → ${ov.type==='formula'?`“${ov.value}” = ${t?t.grade:'—'}`:ov.value}`)}</td><td>${esc(ov.reason||'')}</td></tr>`);
       continue;
     }
     const c=D.cols.find(x=>x.id===colId); if(!c) continue;
@@ -715,7 +715,7 @@ function render(){
       :ov.type==='set'?`${c.title}: ${orig??'—'} → ${ov.value}`
       :ov.type==='formula'?`${c.title}: ${orig??'—'} → “${ov.value}”`
       :`${c.title}: weight → ${(x=>x?(x.code||x.title):'?')(D.cols.find(x=>x.id===ov.to))}`;
-    ovRows.push(`<tr data-ovcol="${colId}" data-ovsi="${si}" title="click to edit"><td>${esc(st.snum||nameOf(st)||'?')}</td><td>${esc(change)}</td><td>${esc(ov.reason||'')}</td></tr>`);
+    ovRows.push(`<tr data-ovcol="${colId}" data-ovsi="${si}" title="click to edit"><td>${esc(nameOf(st)||st.snum||'?')}${st.snum?` <span class="note" style="font-style:italic;font-size:10px">(${esc(st.snum)})</span>`:''}</td><td>${esc(change)}</td><td>${esc(ov.reason||'')}</td></tr>`);
   }});
   const ovTable=`<table class="ovtable"><tr><th class="sid">Student ID</th><th>Change</th><th>Reason</th></tr>
     ${ovRows.join('')||'<tr><td colspan="3" class="note" style="border-color:#e6e6e6">none — click a grade in the marks table to add one</td></tr>'}</table>`;
