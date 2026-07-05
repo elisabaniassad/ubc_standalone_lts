@@ -174,7 +174,7 @@
   <button id="savecsv" title="save just the marks as a CSV (re-importable with IMPORT GRADES)">SAVE GRADES (csv)</button>
   <button id="dl" title="save everything — students, marks, formulas, overrides — as one file">SAVE GRADES + SCHEME (json)</button>
   <button id="schdl" title="save the SCHEME (structure, codes, formulas, weights — no students, no marks) as a file">SAVE SCHEME</button>
-  <button id="wipe" title="erase everything stored in this browser">start over</button>
+  <button id="wipe" title="erase everything stored in this browser" style="background:#fbdce0">start over</button>
 </div>
 <p class="note">Import a CSV indexed by student number. One column per assessment. Separate CSVs will integrate based on student number.<br>
 Load or save a grading scheme — a set of formulas for calculating grades.</p>
@@ -347,6 +347,9 @@ function canon(f){
   // "keep A1" / "but keep A1 and A2" — protects members from the drop
   t=t.replace(/\b(?:but\s+)?keep(?:ing)?\s+((?:[A-Za-z_][A-Za-z0-9_]*)(?:\s*(?:,|and)\s*[A-Za-z_][A-Za-z0-9_]*)*)/gi,
     (m,g)=>'keep('+g.split(/\s*(?:,|and)\s*/i).map(x=>x.trim()).filter(Boolean).join(',')+')');
+  // logical connectives between conditions (leave the or() function alone)
+  t=t.replace(/\band\b(?!\s*\()/gi,' && ');
+  t=t.replace(/\bor\b(?!\s*\()/gi,' || ');
   // move weight
   t=t.replace(/\bmove\s+(?:the\s+)?(?:weight\s+)?to\s+([A-Za-z_][A-Za-z0-9_]*)/gi,'moveto($1)');
   // "if COND, THEN" (not already parenthesised)
@@ -360,7 +363,7 @@ function canon(f){
   let i=0; const s=src;
   const ws=()=>{ while(i<s.length&&/\s/.test(s[i])) i++; };
   function primary(){ ws();
-    if(s[i]==='('){ i++; const v=cmp(); ws(); if(s[i]===')') i++; return v; }
+    if(s[i]==='('){ i++; const v=orL(); ws(); if(s[i]===')') i++; return v; }
     if(s[i]==='-'){ i++; return -primary(); }
     // moveto(CODE): a directive, not a number — move THIS component's weight
     // to CODE (used inside an if, e.g. if(this<50, moveto(FE))). Returns a
@@ -383,8 +386,8 @@ function canon(f){
       if(s[i]===')') i++;
       return sw?sv/sw:NaN;
     }
-    if(fn){ i+=fn[0].length; const args=[cmp()]; ws();
-      while(s[i]===','){ i++; args.push(cmp()); ws(); }
+    if(fn){ i+=fn[0].length; const args=[orL()]; ws();
+      while(s[i]===','){ i++; args.push(orL()); ws(); }
       if(s[i]===')') i++;
       const f=fn[1].toLowerCase();
       if(f==='n0'||f==='orzero') return isFinite(args[0])?args[0]:0;   // orzero(TB) = TB, or 0 when blank
@@ -419,7 +422,14 @@ function canon(f){
     if(m){ i+=m[0].length; const r=add();
       v=m[0]==='<'?v<r:m[0]==='>'?v>r:m[0]==='<='?v<=r:m[0]==='>='?v>=r:v===r; }
     return v; }
-  const out=cmp();
+  const tru=x=>!!x&&x!==0;
+  function andL(){ let v=cmp(); ws();
+    while(s[i]==='&'&&s[i+1]==='&'){ i+=2; const r=cmp(); v=(tru(v)&&tru(r))?1:0; ws(); }
+    return v; }
+  function orL(){ let v=andL(); ws();
+    while(s[i]==='|'&&s[i+1]==='|'){ i+=2; const r=andL(); v=(tru(v)||tru(r))?1:0; ws(); }
+    return v; }
+  const out=orL();
   if(out&&typeof out==='object'&&out.__moveto) return wantMove?out:value;   // moveto is transparent to the value
   return (typeof out==='number'&&isFinite(out))?Math.round(out*10)/10:value;
 }
