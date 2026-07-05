@@ -78,6 +78,17 @@
   .x:hover { color:#a00; background:none; }
   /* the OVERALL GRADE CALCULATION table (the Lifeboat scheme table) */
   table.scheme { width:100%; table-layout:fixed; }
+  .calcwrap { display:flex; gap:20px; align-items:flex-start; }
+  .calcwrap .schemeside { flex:1 1 68%; min-width:0; }
+  .calcwrap .ovside { flex:1 1 30%; min-width:260px; }
+  .ovside h3 { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 6px; }
+  table.ovtable { width:100%; table-layout:fixed; }
+  table.ovtable th, table.ovtable td { border:1px solid var(--line); text-align:left; font-size:12px; padding:3px 7px; overflow-wrap:break-word; }
+  table.ovtable th.sid { width:88px; }
+  table.ovtable tr[data-ovcol] { cursor:pointer; }
+  table.ovtable tr[data-ovcol]:hover td { background:var(--shade); }
+  #gbtable td.gcell { cursor:pointer; }
+  #gbtable td.gcell:hover { background:var(--shade); }
   table.scheme th, table.scheme td { border:1px solid var(--line); text-align:left; }
   table.scheme th.pctcol, table.scheme td.pctcol { width:80px; text-align:center; white-space:nowrap; }
   table.scheme th.codecol { width:100px; }
@@ -144,7 +155,7 @@ Type <code>***</code> as a column's short code or formula to make it THE course 
 Grade formula (optional — nothing is applied unless you type it): <code>ROUND()+BOOST</code> (boost lifts a grade sitting within N of a UBC boundary), <code>ROUNDUP</code>/<code>ROUNDDOWN</code>, <code>SCALE(n)</code>, <code>+BOOST(2)</code>. The Grade column always reports whole numbers.<br>
 Parent folds: <code>DROP(LOWEST[,n])</code>/<code>DROP(HIGHEST[,n])</code> · <code>KEEP(HW5)</code> protects members from the drop · <code>SUM</code>/<code>MAX</code>/<code>MIN</code>.
 Grade formula extras: <code>BUMP(89-&gt;90,79-&gt;80)</code> boosts those exact values only; <code>or(TB,0)</code> takes the first value that exists (so blank TB falls back to 0; <code>orzero(TB)</code> is shorthand) — e.g. raw formula <code>+or(TB,0)</code>.<br>
-Right-click any mark (or a fold) for per-student overrides: <b>Exempt</b> (weight renormalizes), <b>Override value</b>, or <b>Move weight to</b> another component — each with a reason. Overridden cells tint and show <i>(was N)</i>; click one to edit.<br>
+Click any grade in the marks table to edit it: change the mark, <b>Exempt</b> it (weight renormalizes), <b>Replace the grade</b>, or <b>Move weight to</b> another component — a reason is required for overrides, and every change appears in the OVERRIDES ledger beside the scheme.<br>
 A <b>Final Exam</b> column scoring exactly 0 flags <b>DNW</b>.</p>
 
 <h2 style="display:flex;align-items:center">Overall grade calculation<span style="flex:1"></span><button id="schdl" style="font-weight:400;text-transform:none;letter-spacing:0" title="save the SCHEME (structure, codes, formulas, weights — no students, no marks) as a file">Download scheme</button><button id="schload" style="font-weight:400;text-transform:none;letter-spacing:0;margin-left:8px" title="load a scheme file: components match your existing columns by title/code; marks are kept">Load scheme</button></h2>
@@ -460,7 +471,18 @@ function render(){
       <td class="pctcol"><input class="wpct" data-cw="${c.id}" value="${c.weight??''}" inputmode="decimal" placeholder="${child?'eq':''}" title="${child?'share WITHIN '+esc((D.cols.find(x=>x.id===c.parent)||{}).title||'the parent')+' — blank = equal weighting (the default); the parent\'s formula can change how they combine':'% of course grade'}">%</td>
       ${statCells(compStats(c))}
       <td class="xcol"><button class="x" data-delcol="${c.id}" title="remove ${esc(c.title)}${parent?' (its children become top-level)':' and its marks'}">×</button></td></tr>`; };
-  document.getElementById('calc').innerHTML=`<table class="scheme">
+  // the OVERRIDES ledger: one row per change, worded like you'd say it
+  const ovRows=[];
+  D.students.forEach((st,si)=>{ for(const [colId,ov] of Object.entries(st.ov||{})){
+    const c=D.cols.find(x=>x.id===colId); if(!c) continue;
+    const change=ov.type==='exempt'?`Exempt ${c.title}`
+      :ov.type==='set'?`Set ${c.title} = ${ov.value}`
+      :`${c.title} → ${(x=>x?(x.code||x.title):'?')(D.cols.find(x=>x.id===ov.to))}`;
+    ovRows.push(`<tr data-ovcol="${colId}" data-ovsi="${si}" title="click to edit"><td>${esc(st.snum||nameOf(st)||'?')}</td><td>${esc(change)}</td><td>${esc(ov.reason||'')}</td></tr>`);
+  }});
+  const ovTable=`<h3>Overrides</h3><table class="ovtable"><tr><th class="sid">Student ID</th><th>Change</th><th>Reason</th></tr>
+    ${ovRows.join('')||'<tr><td colspan="3" class="note" style="border-color:#e6e6e6">none — click a grade in the marks table to add one</td></tr>'}</table>`;
+  document.getElementById('calc').innerHTML=`<div class="calcwrap"><div class="schemeside"><table class="scheme">
     <tr><th class="gripcol"></th><th class="ctl"></th><th class="codecol">Code</th><th>Component <button id="addcol" class="plus" title="add a component">+</button></th><th class="formcol">Formula</th><th class="pctcol">%</th><th class="statcol">LOW</th><th class="statcol">HIGH</th><th class="statcol">MED</th><th class="statcol">AVG</th><th class="xcol"></th></tr>
     ${ordered.map(rowOf).join('')}
     <tr><td class="gripcol"></td><td class="ctl"></td><td></td><td>RAW</td>
@@ -474,7 +496,8 @@ function render(){
       ${statCells(statsOf(D.students.map(st=>{ const t=totals(st); return t?t.grade:null; })))}
       <td class="xcol"></td></tr>
     <tr class="totalrow"><td class="gripcol"></td><td class="ctl"></td><td></td><td>TOTAL</td><td>${sumOk?'':'<span class="err">should be 100</span>'}</td><td class="pctcol${sumOk?'':' err'}">${Math.round(wsum*10)/10}%</td><td class="statcol"></td><td class="statcol"></td><td class="statcol"></td><td class="statcol"></td><td class="xcol"></td></tr></table>
-    <p><input data-schemenotes value="${esc(D.schemeNotes||'')}" placeholder="scheme notes (pass criteria, hurdles, policies — travels with the scheme file)" style="width:100%;max-width:900px;border:1px solid var(--shade);padding:4px 8px;color:var(--muted)"></p>`;
+    <p><input data-schemenotes value="${esc(D.schemeNotes||'')}" placeholder="scheme notes (pass criteria, hurdles, policies — travels with the scheme file)" style="width:100%;border:1px solid var(--shade);padding:4px 8px;color:var(--muted)"></p></div>
+    <div class="ovside">${ovTable}</div></div>`;
   const selRow=sub('In chart',(c,i)=>`<span class="gbck${SERIES.has(c.id)?' on':''}" data-ck="${c.id}"><span class="dot" style="background:${color(i)}"></span></span>`,
     `<td class="gsep gbck${SERIES.has('__total__')?' on':''}" data-ck="__total__"><span class="dot" style="background:#444"></span></td><td></td><td></td><td></td>`);
   const avgRow=sub('Average',c=>`<span data-avg="${c.id}"></span>`,
@@ -520,8 +543,8 @@ function render(){
             :`${g??'—'} <span class="gbwas">→ ${esc(tgt.code||tgt.title||'?')}</span>`;
           return `<td class="${ov.type==='set'?'ovset':'ovex'}${i===0?' gsep':''}" data-ovcol="${d.c.id}" data-ovsi="${si}" title="${esc(ov.reason||ov.type)} — click to edit the override">${txt}</td>`;
         }
-        if(d.computed) return `<td class="computed${i===0?' gsep':''}${g!=null&&g<50?' fail':''}" data-ovcol="${d.c.id}" data-ovsi="${si}" title="${esc(d.c.title)} — folded from its indented components. Right-click to override/exempt.">${g??'—'}</td>`;
-        return `<td${i===0?' class="gsep"':''} data-ovcol="${d.c.id}" data-ovsi="${si}"${g!=null&&g<50?' class="fail"':''}><input class="mark" data-mark="${d.c.id}" data-si="${si}" value="${st.marks[d.c.id]??''}"></td>`; }).join('')
+        if(d.computed) return `<td class="computed gcell${i===0?' gsep':''}${g!=null&&g<50?' fail':''}" data-ovcol="${d.c.id}" data-ovsi="${si}" title="${esc(d.c.title)} — folded from its indented components; click to override/exempt">${g??'—'}</td>`;
+        return `<td class="gcell${i===0?' gsep':''}${g!=null&&g<50?' fail':''}" data-ovcol="${d.c.id}" data-ovsi="${si}" title="click to edit the mark or override it">${st.marks[d.c.id]??'—'}</td>`; }).join('')
       +`<td class="gsep note">${tt?tt.raw:''}</td><td${cls}>${tt?tt.grade:''}</td><td${cls}>${tt?letterOf(tt.grade):''}</td><td>${dnw?'<span class="dnw">DNW</span>':''}</td></tr>`;
   }).join('');
   document.getElementById('grid').innerHTML=D.cols.length||D.students.length
@@ -809,15 +832,17 @@ function openOverride(colId,si){
   document.getElementById('ovpop')?.remove();
   const c=D.cols.find(x=>x.id===colId), st=D.students[si]; if(!c||!st) return;
   const ov=(st.ov&&st.ov[colId])||{};
+  const leaf=!kidsOf(colId).length;
   const others=D.cols.filter(x=>x.id!==colId);
   const wrap=document.createElement('div'); wrap.id='ovpop';
   wrap.innerHTML=`<div class="ovcard">
     <div style="display:flex;justify-content:space-between"><b>${esc(c.title)} · ${esc(nameOf(st)||st.snum)}</b><a href="#" class="link" id="ovx">cancel</a></div>
-    <label><input type="radio" name="ovact" value="none"${!ov.type?' checked':''}> Unchanged</label>
+    ${leaf?`<label>Mark <input type="text" id="ovmark" value="${st.marks[colId]??''}" placeholder="blank = not graded" style="width:110px"></label><hr style="border:none;border-top:1px solid var(--shade)">`:''}
+    <label><input type="radio" name="ovact" value="none"${!ov.type?' checked':''}> No override</label>
     <label><input type="radio" name="ovact" value="exempt"${ov.type==='exempt'?' checked':''}> Exempt — weight moves to the remaining components</label>
-    <label><input type="radio" name="ovact" value="set"${ov.type==='set'?' checked':''}> Override value <input type="text" id="ovval" value="${ov.type==='set'?ov.value:''}" placeholder="%" style="width:70px"></label>
+    <label><input type="radio" name="ovact" value="set"${ov.type==='set'?' checked':''}> Replace the grade with <input type="text" id="ovval" value="${ov.type==='set'?ov.value:''}" placeholder="%" style="width:70px"></label>
     <label><input type="radio" name="ovact" value="moveto"${ov.type==='moveto'?' checked':''}> Move weight to <select id="ovto">${others.map(o=>`<option value="${o.id}"${ov.to===o.id?' selected':''}>${esc(o.code?o.code+' — ':'')}${esc(o.title)}</option>`).join('')}</select></label>
-    <label>Reason <input type="text" id="ovreason" value="${esc(ov.reason||'')}" placeholder="shown in exports and tooltips"></label>
+    <label>Reason <input type="text" id="ovreason" value="${esc(ov.reason||'')}" placeholder="REQUIRED for any override"></label>
     <p><button id="ovapply">Apply</button></p></div>`;
   const close=()=>wrap.remove();
   wrap.addEventListener('click',ev=>{ if(ev.target===wrap||ev.target.id==='ovx'){ ev.preventDefault(); close(); } });
@@ -826,6 +851,12 @@ function openOverride(colId,si){
   wrap.querySelector('#ovapply').addEventListener('click',()=>{
     const act=wrap.querySelector('input[name="ovact"]:checked').value;
     const reason=wrap.querySelector('#ovreason').value.trim();
+    if(act!=='none'&&!reason){ wrap.querySelector('#ovreason').focus(); return; }   // no silent overrides
+    const mk=wrap.querySelector('#ovmark');
+    if(mk){ const v=mk.value.trim();
+      if(v===''){ delete st.marks[colId]; }
+      else if(isFinite(+v)) st.marks[colId]=+v;
+      else { alert('marks are numbers (or blank)'); return; } }
     st.ov=st.ov||{};
     if(act==='none') delete st.ov[colId];
     else if(act==='exempt') st.ov[colId]={type:'exempt',reason};
@@ -845,8 +876,9 @@ document.addEventListener('contextmenu',e=>{
   e.preventDefault(); openOverride(td.dataset.ovcol,+td.dataset.ovsi);
 });
 document.addEventListener('click',e=>{
-  const td=e.target.closest?.('td.ovset[data-ovcol],td.ovex[data-ovcol]'); if(!td) return;
-  openOverride(td.dataset.ovcol,+td.dataset.ovsi);
+  const t=e.target.closest?.('td.ovset[data-ovcol],td.ovex[data-ovcol],td.gcell[data-ovcol],tr[data-ovcol]');
+  if(!t) return;
+  openOverride(t.dataset.ovcol,+t.dataset.ovsi);
 });
 // drag the ≡ grip onto another calculation row to reorder (a parent moves
 // with its children; a row dropped on a child joins that child's parent)
