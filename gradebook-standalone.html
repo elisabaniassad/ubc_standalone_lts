@@ -78,10 +78,11 @@
   .x:hover { color:#a00; background:none; }
   /* the OVERALL GRADE CALCULATION table (the Lifeboat scheme table) */
   table.scheme { width:100%; table-layout:fixed; }
-  .calcwrap { display:flex; gap:20px; align-items:flex-start; }
-  .calcwrap .schemeside { flex:1 1 68%; min-width:0; }
-  .calcwrap .ovside { flex:1 1 30%; min-width:260px; }
-  .ovside h3 { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 6px; }
+  /* below the full-width scheme table: Overrides (1/3) left, the big
+     histogram (2/3) right */
+  .lowerwrap { display:flex; gap:20px; align-items:flex-start; }
+  .lowerwrap .ovcol { flex:1 1 33%; min-width:0; }
+  .lowerwrap .distcol { flex:1 1 66%; min-width:0; }
   table.ovtable { width:100%; table-layout:fixed; }
   table.ovtable th, table.ovtable td { border:1px solid var(--line); text-align:left; font-size:12px; padding:3px 7px; overflow-wrap:break-word; }
   table.ovtable th.sid { width:88px; }
@@ -176,12 +177,17 @@
   <b>Course Raw</b> — <code>***</code> as a code or formula marks the course Raw column · <b>Cap rule</b> — a condition over codes → a maximum grade
 </div>
 
-<h2>Grade distribution</h2>
-<div class="histcard">
-  <div id="histstats" style="font-weight:600; margin-bottom:6px"></div>
-  <div class="bar"><label>Buckets <select id="bucket"><option value="5">5%</option><option value="10">10%</option><option value="20">20%</option><option value="LETTER" selected>Letter (UBC)</option></select></label>
-  <span class="note">Toggle series in the table's "In chart" row.</span></div>
-  <div id="chart"></div>
+<div class="lowerwrap">
+  <div class="ovcol"><h2>Overrides</h2><div id="ovmount"></div></div>
+  <div class="distcol">
+    <h2>Grade distribution</h2>
+    <div class="histcard">
+      <div id="histstats" style="font-weight:600; margin-bottom:6px"></div>
+      <div class="bar"><label>Buckets <select id="bucket"><option value="5">5%</option><option value="10">10%</option><option value="20">20%</option><option value="LETTER" selected>Letter (UBC)</option></select></label>
+      <span class="note">Toggle series in the table's "In chart" row.</span></div>
+      <div id="chart"></div>
+    </div>
+  </div>
 </div>
 
 <h2>Marks</h2>
@@ -593,12 +599,12 @@ function render(){
       :`${c.title}: weight → ${(x=>x?(x.code||x.title):'?')(D.cols.find(x=>x.id===ov.to))}`;
     ovRows.push(`<tr data-ovcol="${colId}" data-ovsi="${si}" title="click to edit"><td>${esc(st.snum||nameOf(st)||'?')}</td><td>${esc(change)}</td><td>${esc(ov.reason||'')}</td></tr>`);
   }});
-  const ovTable=`<h3>Overrides</h3><table class="ovtable"><tr><th class="sid">Student ID</th><th>Change</th><th>Reason</th></tr>
+  const ovTable=`<table class="ovtable"><tr><th class="sid">Student ID</th><th>Change</th><th>Reason</th></tr>
     ${ovRows.join('')||'<tr><td colspan="3" class="note" style="border-color:#e6e6e6">none — click a grade in the marks table to add one</td></tr>'}</table>`;
   const schHead=`<tr><th class="gripcol" title="drag a row to reorder">↕</th><th class="ctl">indent</th><th class="codecol">Code</th><th>Component <button id="addcol" class="plus" title="add a component">+</button></th><th class="formcol">Formula <button type="button" id="fhintbtn" class="plus" title="formula reference">?</button></th><th class="statcol">MAX</th><th class="pctcol">%</th><th class="statcol">LOW</th><th class="statcol">HIGH</th><th class="statcol">MED</th><th class="statcol">AVG</th><th class="xcol"></th></tr>`;
   document.getElementById('calc').innerHTML=!D.cols.length
     ?`<table class="scheme">${schHead}<tr><td colspan="12" class="note" style="text-align:center;padding:22px 12px">No grading scheme yet. Click <b>+</b> to add a component, or use <b>Import CSV</b> / <b>Load scheme</b> above.</td></tr></table>`
-    :`<div class="calcwrap"><div class="schemeside"><table class="scheme">
+    :`<table class="scheme">
     ${schHead}
     ${ordered.map(rowOf).join('')}
     <tr><td class="gripcol"></td><td class="ctl"></td><td></td><td>RAW</td>
@@ -624,8 +630,8 @@ function render(){
       ${statCells(statsOf(D.students.map(st=>{ const t=totals(st); return t?t.grade:null; })))}
       <td class="xcol"></td></tr>
     <tr class="totalrow"><td class="gripcol"></td><td class="ctl"></td><td></td><td>TOTAL</td><td></td><td class="statcol"></td><td class="pctcol${sumOk?'':' err'}">${Math.round(wsum*10)/10}%</td><td class="statcol"></td><td class="statcol"></td><td class="statcol"></td><td class="statcol"></td><td class="xcol"></td></tr></table>
-    <p><input data-schemenotes value="${esc(D.schemeNotes||'')}" placeholder="scheme notes (pass criteria, hurdles, policies — travels with the scheme file)" style="width:100%;border:1px solid var(--shade);padding:4px 8px;color:var(--muted)"></p></div>
-    <div class="ovside">${ovTable}</div></div>`;
+    <p><input data-schemenotes value="${esc(D.schemeNotes||'')}" placeholder="scheme notes (pass criteria, hurdles, policies — travels with the scheme file)" style="width:100%;border:1px solid var(--shade);padding:4px 8px;color:var(--muted)"></p>`;
+  document.getElementById('ovmount').innerHTML=ovTable;
   const selRow=sub('In chart',(c,i)=>`<span class="gbck${SERIES.has(c.id)?' on':''}" data-ck="${c.id}"><span class="dot" style="background:${color(i)}"></span></span>`,
     `<td class="gsep gbck${SERIES.has('__total__')?' on':''}" data-ck="__total__"><span class="dot" style="background:#444"></span></td><td></td><td></td><td></td>`);
   const avgRow=sub('Average',c=>`<span data-avg="${c.id}"></span>`,
