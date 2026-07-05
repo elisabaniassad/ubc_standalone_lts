@@ -31,6 +31,8 @@
            padding:4px 8px; text-align:center; font-weight:400; }
   .setup input { border:1px solid var(--line); padding:4px 8px; }
   .bar { display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+  .schemehead { display:flex; align-items:center; gap:8px; flex-wrap:wrap; border-bottom:1px solid var(--line); margin:22px 0 8px; padding-bottom:6px; }
+  .schemehead h2 { border:none; margin:0; padding:0; }
   .bar input[type=search] { flex:1; max-width:780px; padding:5px 8px; border:1px solid var(--line); }
   .dark { background:var(--line); color:#fff; border:none; text-transform:uppercase; font-weight:600; letter-spacing:.06em; padding:7px 12px; }
   .dark:hover { background:#333; }
@@ -156,22 +158,25 @@
   <label>Course Number <input id="fnum" placeholder="210" style="width:60px"></label>
   <label>Section Number <input id="fsec" placeholder="101" style="width:60px" title="used for students whose row has no section"></label>
   <span style="flex:1"></span>
+  <button class="dark" id="wd">Export for Workday</button>
+</div>
+<p id="storagenote"></p>
+
+<div class="schemehead">
+  <h2>Grading scheme</h2>
+  <span style="flex:1"></span>
   <input type="file" id="csvfile" accept=".csv,.json" style="display:none">
+  <input type="file" id="schfile" accept=".txt,.scheme,.json" style="display:none">
   <button id="sample" title="load a sample class (fake students) to see how everything works">LOAD SAMPLE</button>
   <button id="importbtn" title="import a grades CSV (joined by student number) — or reload a previously saved grades file">IMPORT GRADES (csv)</button>
   <button id="schload" title="load a scheme file: components match your existing columns by title/code; marks are kept">IMPORT SCHEME (csv)</button>
-  <input type="file" id="schfile" accept=".txt,.scheme,.json" style="display:none">
   <button id="savecsv" title="save just the marks as a CSV (re-importable with IMPORT GRADES)">SAVE GRADES (csv)</button>
   <button id="dl" title="save everything — students, marks, formulas, overrides — as one file">SAVE GRADES + SCHEME (json)</button>
   <button id="schdl" title="save the SCHEME (structure, codes, formulas, weights — no students, no marks) as a file">SAVE SCHEME</button>
   <button id="wipe" title="erase everything stored in this browser">start over</button>
-  <button class="dark" id="wd">Export for Workday</button>
 </div>
-<p id="storagenote"></p>
 <p class="note">Import a CSV indexed by student number. One column per assessment. Separate CSVs will integrate based on student number.<br>
 Load or save a grading scheme — a set of formulas for calculating grades.</p>
-
-<h2>Overall grade calculation</h2>
 <div id="calc"></div>
 <div id="fhintbox" class="note" style="display:none;border:1px solid var(--line);padding:10px 14px;margin:6px 0 0;max-width:1080px;line-height:1.8;font-size:12px">
   <b>Formula reference</b> &nbsp;<span class="note">(<code>this</code> = this cell; <code>a</code>, <code>b</code>, … = other columns' codes)</span><br>
