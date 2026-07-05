@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>informal grade scheme checker - double check this checker!</title>
+<title>Informal grade combiner and checker — double check — this might be wrong</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,400;0,600;0,700&display=swap" rel="stylesheet">
 <style>
@@ -148,7 +148,7 @@
 </style>
 </head>
 <body>
-<h1>Informal grade scheme checker <span class="note">— double check this checker! Everything stays on this machine; browser storage self-clears 2 hours after your last change (Download data to keep work longer); nothing leaves it except your exports.</span></h1>
+<h1>Informal grade combiner and checker <span class="note">— double check — this might be wrong. Everything stays on this machine; browser storage self-clears 2 hours after your last change (Download data to keep work longer); nothing leaves it except your exports.</span></h1>
 
 <div class="setup bar">
   <label>Academic Period <input id="fterm" placeholder="2025-26 Winter Term 2 (UBC-V)" style="width:230px" title="copied into the Workday export exactly as typed"></label>
@@ -156,14 +156,12 @@
   <label>Course Number <input id="fnum" placeholder="210" style="width:60px"></label>
   <label>Section Number <input id="fsec" placeholder="101" style="width:60px" title="used for students whose row has no section"></label>
   <span style="flex:1"></span>
-  <input type="file" id="csvfile" accept=".csv" style="display:none">
-  <button id="importbtn" title="CSV: Student #, First, Last, Section (optional), then one column per assessment">Import CSV</button>
-  <input type="file" id="jsonfile" accept=".json" style="display:none">
+  <input type="file" id="csvfile" accept=".csv,.json" style="display:none">
+  <button id="importbtn" title="import a grades CSV (joined by student number) — or reload a previously saved grades file">IMPORT GRADES (csv)</button>
+  <button id="schload" title="load a scheme file: components match your existing columns by title/code; marks are kept">IMPORT SCHEME (csv)</button>
   <input type="file" id="schfile" accept=".txt,.scheme,.json" style="display:none">
-  <button id="dl" title="save everything (students, marks, formulas) as a file — works even when browser storage is full">Download data</button>
-  <button id="loadbtn" title="load a previously downloaded data file">Load data</button>
-  <button id="schdl" title="save the SCHEME (structure, codes, formulas, weights — no students, no marks) as a file">Download scheme</button>
-  <button id="schload" title="load a scheme file: components match your existing columns by title/code; marks are kept">Load scheme</button>
+  <button id="dl" title="save everything (students, marks, formulas) as a file — works even when browser storage is full">SAVE GRADES</button>
+  <button id="schdl" title="save the SCHEME (structure, codes, formulas, weights — no students, no marks) as a file">SAVE SCHEME</button>
   <button id="wipe" title="erase everything stored in this browser">start over</button>
   <button class="dark" id="wd">Export for Workday</button>
 </div>
@@ -1261,17 +1259,6 @@ document.addEventListener('drop',e=>{
   moveBlock(drag,tgt.parent||null,D.cols.indexOf(tgt));         // before the target, at its level
   save(); SERIES=null; render();
 });
-document.getElementById('jsonfile').addEventListener('change',e=>{
-  const f=e.target.files[0]; if(!f) return;
-  const r=new FileReader();
-  r.onerror=()=>alert('Could not read that file.');
-  r.onload=()=>{ try{ const d=sanitize(JSON.parse(r.result));
-      if(!d||!Array.isArray(d.cols)||!Array.isArray(d.students)) throw new Error('not a gradebook data file');
-      D=d; collapseAll(); save(); SERIES=null; render();
-    }catch(err){ alert('Load failed: '+err.message); } };
-  r.readAsText(f);
-  e.target.value='';
-});
 document.getElementById('schfile').addEventListener('change',e=>{
   const f=e.target.files[0]; if(!f) return;
   const r=new FileReader();
@@ -1285,7 +1272,14 @@ document.getElementById('csvfile').addEventListener('change',e=>{
   const f=e.target.files[0]; if(!f) return;
   const r=new FileReader();
   r.onerror=()=>alert('Could not read that file: '+(r.error&&r.error.message||'unknown error'));
-  r.onload=()=>{ try{ importCSV(r.result); }catch(err){ alert('Import failed: '+err.message); } };
+  r.onload=()=>{ try{
+      const txt=String(r.result);
+      if(txt.trim().startsWith('{')){                 // a previously saved grades file
+        const d=sanitize(JSON.parse(txt));
+        if(!d||!Array.isArray(d.cols)||!Array.isArray(d.students)) throw new Error('not a grades file');
+        D=d; collapseAll(); save(); SERIES=null; render();
+      } else importCSV(txt);
+    }catch(err){ alert('Import failed: '+err.message); } };
   r.readAsText(f);
   e.target.value='';
 });
@@ -1353,7 +1347,6 @@ document.addEventListener('click',e=>{
     a.href=URL.createObjectURL(new Blob([JSON.stringify(D)],{type:'application/json'}));
     a.download=(((D.subject||'')+(D.number||''))||'gradebook')+'_gradebook.json';
     a.click(); URL.revokeObjectURL(a.href); return; }
-  if(e.target.id==='loadbtn'){ document.getElementById('jsonfile').click(); return; }
   if(e.target.id==='wd'){ exportWD(); return; }
   if(e.target.id==='wipe'){ if(!confirm('Erase EVERYTHING stored in this browser for this gradebook?')) return;
     localStorage.removeItem(KEY); D={subject:'',number:'',section:'',term:'',cols:[],students:[],rawFormula:'',gradeFormula:'',boostFormula:''}; SERIES=null; render(); return; }
