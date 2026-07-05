@@ -91,13 +91,15 @@
   #gbtable td.gcell:hover { background:var(--shade); }
   table.scheme th, table.scheme td { border:1px solid var(--line); text-align:left; overflow:hidden; }
   table.scheme th.pctcol, table.scheme td.pctcol { width:7%; text-align:center; white-space:nowrap; }
-  table.scheme th.codecol { width:8%; }
+  table.scheme th.codecol { width:5%; }
   table.scheme th.formcol { width:30%; }
   table.scheme td.xcol, table.scheme th.xcol { border:none; width:3%; text-align:center; }
-  /* the indent/outdent column: a narrow, bordered, first-class table column
-     snug against the component names — only the TEXT indents */
-  table.scheme td.gripcol, table.scheme th.gripcol { width:3%; min-width:26px; text-align:center; padding:2px 2px; }
-  table.scheme td.ctl, table.scheme th.ctl { width:6%; min-width:48px; white-space:nowrap; text-align:center; padding:2px 3px; }
+  /* reorder + indent: the two narrowest columns; the Component column gets
+     the width they give up (only the component TEXT indents) */
+  table.scheme td.gripcol, table.scheme th.gripcol { width:1%; min-width:18px; text-align:center; padding:2px 0; }
+  table.scheme th.gripcol { font-size:11px; color:var(--muted); }
+  table.scheme td.ctl, table.scheme th.ctl { width:3%; min-width:40px; text-align:center; padding:1px 0; }
+  table.scheme th.ctl { font-size:8.5px; text-transform:uppercase; letter-spacing:.03em; color:var(--muted); line-height:1.1; }
   table.scheme input { font:inherit; border:none; background:transparent; padding:2px 4px; width:100%; box-sizing:border-box; }
   table.scheme input:focus { outline:none; background:#fff; box-shadow:inset 0 0 0 1px var(--line); }
   table.scheme input.wpct { width:48px; text-align:right; }
@@ -105,8 +107,8 @@
   .plus { font-size:15px; line-height:1; padding:1px 8px; }
   .scheme th .plus, .scheme td .plus { float:right; }
   .grip { cursor:grab; color:var(--muted); padding:0 6px 0 2px; }
-  .indent { border:none; background:none; cursor:pointer; color:var(--muted); padding:0 4px; font-size:12px; }
-  .indent:hover { color:var(--line); background:none; }
+  .indent { display:block; margin:0 auto; border:none; background:none; cursor:pointer; color:var(--line); padding:0; font-size:15px; line-height:1; }
+  .indent:hover { color:#000; background:none; }
   .tri { border:none; background:none; cursor:pointer; color:var(--line); padding:0 8px; font-size:19px; line-height:1; margin-left:auto; }
   .tri:hover { background:none; color:#0a4a86; }
 
@@ -560,8 +562,8 @@ function render(){
     // preceding SIBLING (same parent) = what → would nest this under
     const sibs=D.cols.filter(x=>(x.parent||null)===(c.parent||null));
     const prevSib=sibs[sibs.indexOf(c)-1];
-    const ind=(child?`<button class="indent" data-out="${c.id}" title="promote one level up — later siblings become its sub-components, so nothing moves">←</button>`:'')
-      +(prevSib?`<button class="indent" data-ind="${c.id}" title="make this a sub-component of ${esc(prevSib.title)} — nothing moves, only the depth changes">→</button>`:'');
+    const ind=(child?`<button class="indent" data-out="${c.id}" title="promote one level up — later siblings become its sub-components, so nothing moves">◀</button>`:'')
+      +(prevSib?`<button class="indent" data-ind="${c.id}" title="make this a sub-component of ${esc(prevSib.title)} — nothing moves, only the depth changes">▶</button>`:'');
     const tri=parent?`<button class="tri" data-tog="${c.id}" title="show/hide the components under ${esc(c.title)}">${COLL.has(c.id)?'▸':'▾'}</button>`:'';
     return `<tr${parent?' class="parentrow"':(child?' class="child"':'')} data-cid="${c.id}">
       <td class="gripcol"><span class="grip" draggable="true" data-drag="${c.id}" title="drag to reorder">≡</span></td>
@@ -590,7 +592,7 @@ function render(){
   }});
   const ovTable=`<h3>Overrides</h3><table class="ovtable"><tr><th class="sid">Student ID</th><th>Change</th><th>Reason</th></tr>
     ${ovRows.join('')||'<tr><td colspan="3" class="note" style="border-color:#e6e6e6">none — click a grade in the marks table to add one</td></tr>'}</table>`;
-  const schHead=`<tr><th class="gripcol"></th><th class="ctl"></th><th class="codecol">Code</th><th>Component <button id="addcol" class="plus" title="add a component">+</button></th><th class="formcol">Formula <button type="button" id="fhintbtn" class="plus" title="formula reference">?</button></th><th class="statcol">MAX</th><th class="pctcol">%</th><th class="statcol">LOW</th><th class="statcol">HIGH</th><th class="statcol">MED</th><th class="statcol">AVG</th><th class="xcol"></th></tr>`;
+  const schHead=`<tr><th class="gripcol" title="drag a row to reorder">↕</th><th class="ctl">indent</th><th class="codecol">Code</th><th>Component <button id="addcol" class="plus" title="add a component">+</button></th><th class="formcol">Formula <button type="button" id="fhintbtn" class="plus" title="formula reference">?</button></th><th class="statcol">MAX</th><th class="pctcol">%</th><th class="statcol">LOW</th><th class="statcol">HIGH</th><th class="statcol">MED</th><th class="statcol">AVG</th><th class="xcol"></th></tr>`;
   document.getElementById('calc').innerHTML=!D.cols.length
     ?`<table class="scheme">${schHead}<tr><td colspan="12" class="note" style="text-align:center;padding:22px 12px">No grading scheme yet. Click <b>+</b> to add a component, or use <b>Import CSV</b> / <b>Load scheme</b> above.</td></tr></table>`
     :`<div class="calcwrap"><div class="schemeside"><table class="scheme">
@@ -618,7 +620,7 @@ function render(){
       <td class="statcol"></td>
       ${statCells(statsOf(D.students.map(st=>{ const t=totals(st); return t?t.grade:null; })))}
       <td class="xcol"></td></tr>
-    <tr class="totalrow"><td class="gripcol"></td><td class="ctl"></td><td></td><td>TOTAL</td><td>${sumOk?'':'<span class="err">should be 100</span>'}</td><td class="statcol"></td><td class="pctcol${sumOk?'':' err'}">${Math.round(wsum*10)/10}%</td><td class="statcol"></td><td class="statcol"></td><td class="statcol"></td><td class="statcol"></td><td class="xcol"></td></tr></table>
+    <tr class="totalrow"><td class="gripcol"></td><td class="ctl"></td><td></td><td>TOTAL</td><td></td><td class="statcol"></td><td class="pctcol${sumOk?'':' err'}">${Math.round(wsum*10)/10}%</td><td class="statcol"></td><td class="statcol"></td><td class="statcol"></td><td class="statcol"></td><td class="xcol"></td></tr></table>
     <p><input data-schemenotes value="${esc(D.schemeNotes||'')}" placeholder="scheme notes (pass criteria, hurdles, policies — travels with the scheme file)" style="width:100%;border:1px solid var(--shade);padding:4px 8px;color:var(--muted)"></p></div>
     <div class="ovside">${ovTable}</div></div>`;
   const selRow=sub('In chart',(c,i)=>`<span class="gbck${SERIES.has(c.id)?' on':''}" data-ck="${c.id}"><span class="dot" style="background:${color(i)}"></span></span>`,
