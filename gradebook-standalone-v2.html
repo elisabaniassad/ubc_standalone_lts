@@ -116,6 +116,7 @@
   input.badformula { background:#fde7e4 !important; }
   /* per-cell overrides (LMS1): set = pale orange, exempt/moveto = grey */
   td.ovset { background:#ffe6c4; cursor:pointer; }
+  td.ovin { background:#fff3e0; }      /* a fold containing an overridden grade */
   td.ovex { background:#e4e7ea; color:var(--muted); cursor:pointer; }
   .gbwas { font-size:10px; color:var(--muted); }
   #ovpop { position:fixed; inset:0; background:rgba(0,0,0,.25); z-index:9; }
@@ -543,7 +544,10 @@ function render(){
             :`${g??'—'} <span class="gbwas">→ ${esc(tgt.code||tgt.title||'?')}</span>`;
           return `<td class="${ov.type==='set'?'ovset':'ovex'}${i===0?' gsep':''}" data-ovcol="${d.c.id}" data-ovsi="${si}" title="${esc(ov.reason||ov.type)} — click to edit the override">${txt}</td>`;
         }
-        if(d.computed) return `<td class="computed gcell${i===0?' gsep':''}${g!=null&&g<50?' fail':''}" data-ovcol="${d.c.id}" data-ovsi="${si}" title="${esc(d.c.title)} — folded from its indented components; click to override/exempt">${g??'—'}</td>`;
+        if(d.computed){
+          const ovIn=st.ov&&subtreeOf(d.c.id).some(k=>st.ov[k.id]);
+          return `<td class="computed gcell${ovIn?' ovin':''}${i===0?' gsep':''}${g!=null&&g<50?' fail':''}" data-ovcol="${d.c.id}" data-ovsi="${si}" title="${esc(d.c.title)} — folded from its indented components${ovIn?'; CONTAINS AN OVERRIDDEN GRADE':''}; click to override/exempt">${g??'—'}</td>`;
+        }
         return `<td class="gcell${i===0?' gsep':''}${g!=null&&g<50?' fail':''}" data-ovcol="${d.c.id}" data-ovsi="${si}" title="click to edit the mark or override it">${st.marks[d.c.id]??'—'}</td>`; }).join('')
       +`<td class="gsep note">${tt?tt.raw:''}</td><td${cls}>${tt?tt.grade:''}</td><td${cls}>${tt?letterOf(tt.grade):''}</td><td>${dnw?'<span class="dnw">DNW</span>':''}</td></tr>`;
   }).join('');
