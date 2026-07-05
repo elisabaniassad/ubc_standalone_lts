@@ -329,6 +329,9 @@ function canon(f){
   // drop lowest/highest in words
   t=t.replace(/\bdrop\s+(?:the\s+)?lowest(?:\s+(\d+))?\b/gi,(m,n)=>n?`drop(lowest,${n})`:'drop(lowest)');
   t=t.replace(/\bdrop\s+(?:the\s+)?highest(?:\s+(\d+))?\b/gi,(m,n)=>n?`drop(highest,${n})`:'drop(highest)');
+  // "keep A1" / "but keep A1 and A2" — protects members from the drop
+  t=t.replace(/\b(?:but\s+)?keep(?:ing)?\s+((?:[A-Za-z_][A-Za-z0-9_]*)(?:\s*(?:,|and)\s*[A-Za-z_][A-Za-z0-9_]*)*)/gi,
+    (m,g)=>'keep('+g.split(/\s*(?:,|and)\s*/i).map(x=>x.trim()).filter(Boolean).join(',')+')');
   // move weight
   t=t.replace(/\bmove\s+(?:the\s+)?(?:weight\s+)?to\s+([A-Za-z_][A-Za-z0-9_]*)/gi,'moveto($1)');
   // "if COND, THEN" (not already parenthesised)
