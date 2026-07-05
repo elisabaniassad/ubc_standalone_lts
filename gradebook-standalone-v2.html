@@ -211,7 +211,7 @@ function sanitize(d){
   delete d.code;
   d.cols=(Array.isArray(d.cols)?d.cols:[]).filter(c=>c&&c.id&&c.title!=null).map(c=>({
     id:String(c.id), title:String(c.title), code:c.code||'', formula:c.formula||'',
-    weight:(c.weight==null||c.weight==='')?null:+c.weight, parent:c.parent||null}));
+    weight:(c.weight==null||c.weight==='')?null:+c.weight, max:(+c.max>0)?+c.max:null, parent:c.parent||null}));
   const ids=new Set(d.cols.map(c=>c.id));
   fillCodes(d.cols);                                      // every component gets a handle
   d.cols.forEach(c=>{ if(c.parent&&(!ids.has(c.parent)||c.parent===c.id)) c.parent=null; });
@@ -534,6 +534,7 @@ function render(){
       <td><input data-ccode="${c.id}" value="${esc(c.code||'')}" placeholder="—" style="text-align:center"></td>
       <td style="padding-left:${8+depth*24}px"><span style="display:flex;align-items:center"><input data-ctitle="${c.id}" value="${esc(c.title)}" style="flex:1;width:auto">${tri}</span></td>
       <td><input class="${fmClass(c.formula)}" data-cform="${c.id}" value="${esc(c.formula||'')}" placeholder="—" title="${esc(fmTitle(c.formula, parent?'folds the indented children: DROP(LOWEST[,n]) · DROP(HIGHEST[,n]) · SUM · MAX · MIN · then SCALE(n)/expressions':"SCALE(10) · if(this>89,100) · clamp(this,0,100) · other columns' codes"))}"></td>
+      <td class="statcol"><input data-cmax="${c.id}" value="${c.max??''}" inputmode="decimal" placeholder="100" title="max grade — what this column is out of; half of it draws the fail line" style="width:100%;text-align:center;border:none;background:transparent;font:inherit;color:inherit"></td>
       <td class="pctcol"><input class="wpct" data-cw="${c.id}" value="${c.weight??''}" inputmode="decimal" placeholder="${child?'eq':''}" title="${child?'share WITHIN '+esc((D.cols.find(x=>x.id===c.parent)||{}).title||'the parent')+' — blank = equal weighting (the default); the parent\'s formula can change how they combine':'% of course grade'}">%</td>
       ${statCells(compStats(c))}
       <td class="xcol"><button class="x" data-delcol="${c.id}" title="remove ${esc(c.title)}${parent?' (its children become top-level)':' and its marks'}">×</button></td></tr>`; };
@@ -555,11 +556,12 @@ function render(){
   const ovTable=`<h3>Overrides</h3><table class="ovtable"><tr><th class="sid">Student ID</th><th>Change</th><th>Reason</th></tr>
     ${ovRows.join('')||'<tr><td colspan="3" class="note" style="border-color:#e6e6e6">none — click a grade in the marks table to add one</td></tr>'}</table>`;
   document.getElementById('calc').innerHTML=`<div class="calcwrap"><div class="schemeside"><table class="scheme">
-    <tr><th class="gripcol"></th><th class="ctl"></th><th class="codecol">Code</th><th>Component <button id="addcol" class="plus" title="add a component">+</button></th><th class="formcol">Formula</th><th class="pctcol">%</th><th class="statcol">LOW</th><th class="statcol">HIGH</th><th class="statcol">MED</th><th class="statcol">AVG</th><th class="xcol"></th></tr>
+    <tr><th class="gripcol"></th><th class="ctl"></th><th class="codecol">Code</th><th>Component <button id="addcol" class="plus" title="add a component">+</button></th><th class="formcol">Formula</th><th class="statcol">MAX</th><th class="pctcol">%</th><th class="statcol">LOW</th><th class="statcol">HIGH</th><th class="statcol">MED</th><th class="statcol">AVG</th><th class="xcol"></th></tr>
     ${ordered.map(rowOf).join('')}
     <tr><td class="gripcol"></td><td class="ctl"></td><td></td><td>RAW</td>
       <td><input class="${fmClass(D.rawFormula)}" data-rawform value="${esc(D.rawFormula||'')}" placeholder="weighted sum" title="${esc(fmTitle(D.rawFormula,'Raw formula — e.g. this+or(TB,0)'))}"></td>
       <td class="pctcol"></td>
+      <td class="statcol"></td>
       ${statCells(statsOf(D.students.map(st=>{ const t=totals(st); return t?t.raw:null; })))}
       <td class="xcol"></td></tr>
     ${((D.capRules||[]).length?D.capRules:[null]).map((r,ri)=>{
@@ -568,15 +570,17 @@ function render(){
       <td class="note" style="white-space:nowrap">GRADE CAP RULE${ri===0?' <button id="capadd" class="plus" title="add a cap rule">+</button>':''}</td>
       <td>${r?`<span class="note">if</span> <input class="${fmClass('if('+(r.cond||'this')+',1,0)')}" data-capcond="${ri}" value="${esc(r.cond||'')}" placeholder="e.g. WAVG(T1,T2,T3,FIN)<50" title="${esc(fmTitle('if('+(r.cond||'this')+',1,0)','a condition over codes — matching students show an orange Raw and are capped'))}" style="width:46%"> <span class="note" style="font-size:10px;white-space:nowrap">→ max course grade</span> <input data-capto="${ri}" value="${r.to??''}" inputmode="decimal" style="width:40px">${isFinite(+r.to)&&r.to!=null&&r.to!==''?` <span class="note" style="font-size:10px">(${letterOf(+r.to)})</span>`:''}`
       :'<span class="note">policy hurdles — e.g. if HW&lt;40, the grade is at most 45</span>'}</td>
+      <td class="statcol"></td>
       <td class="pctcol note" title="students this rule caps">${r?(nhit?`${nhit} \u0394`:''):''}</td>
       <td class="statcol"></td><td class="statcol"></td><td class="statcol"></td><td class="statcol"></td>
       <td class="xcol">${r?`<button class="x" data-capdel="${ri}" title="remove this cap rule">×</button>`:''}</td></tr>`; }).join('')}
     <tr><td class="gripcol"></td><td class="ctl"></td><td></td><td>GRADE</td>
       <td><input class="${fmClass(D.gradeFormula)}" data-gradeform value="${esc(D.gradeFormula||'')}" placeholder="—" title="${esc(fmTitle(D.gradeFormula,'Grade formula (optional) — e.g. ROUND()+BOOST'))}"></td>
       <td class="pctcol"></td>
+      <td class="statcol"></td>
       ${statCells(statsOf(D.students.map(st=>{ const t=totals(st); return t?t.grade:null; })))}
       <td class="xcol"></td></tr>
-    <tr class="totalrow"><td class="gripcol"></td><td class="ctl"></td><td></td><td>TOTAL</td><td>${sumOk?'':'<span class="err">should be 100</span>'}</td><td class="pctcol${sumOk?'':' err'}">${Math.round(wsum*10)/10}%</td><td class="statcol"></td><td class="statcol"></td><td class="statcol"></td><td class="statcol"></td><td class="xcol"></td></tr></table>
+    <tr class="totalrow"><td class="gripcol"></td><td class="ctl"></td><td></td><td>TOTAL</td><td>${sumOk?'':'<span class="err">should be 100</span>'}</td><td class="statcol"></td><td class="pctcol${sumOk?'':' err'}">${Math.round(wsum*10)/10}%</td><td class="statcol"></td><td class="statcol"></td><td class="statcol"></td><td class="statcol"></td><td class="xcol"></td></tr></table>
     <p><input data-schemenotes value="${esc(D.schemeNotes||'')}" placeholder="scheme notes (pass criteria, hurdles, policies — travels with the scheme file)" style="width:100%;border:1px solid var(--shade);padding:4px 8px;color:var(--muted)"></p></div>
     <div class="ovside">${ovTable}</div></div>`;
   const selRow=sub('In chart',(c,i)=>`<span class="gbck${SERIES.has(c.id)?' on':''}" data-ck="${c.id}"><span class="dot" style="background:${color(i)}"></span></span>`,
@@ -632,9 +636,9 @@ function render(){
         }
         if(d.computed){
           const ovIn=st.ov&&subtreeOf(d.c.id).some(k=>st.ov[k.id]);
-          return `<td class="computed gcell${ovIn?' ovin':''}${i===0?' gsep':''}${g!=null&&g<50?' fail':''}" data-ovcol="${d.c.id}" data-ovsi="${si}" title="${esc(d.c.title)} — folded from its indented components${ovIn?'; CONTAINS AN OVERRIDDEN GRADE':''}; click to override/exempt">${g??'—'}</td>`;
+          return `<td class="computed gcell${ovIn?' ovin':''}${i===0?' gsep':''}${g!=null&&g<(+d.c.max>0?+d.c.max/2:50)?' fail':''}" data-ovcol="${d.c.id}" data-ovsi="${si}" title="${esc(d.c.title)} — folded from its indented components${ovIn?'; CONTAINS AN OVERRIDDEN GRADE':''}; click to override/exempt">${g??'—'}</td>`;
         }
-        return `<td class="gcell${i===0?' gsep':''}${g!=null&&g<50?' fail':''}" data-ovcol="${d.c.id}" data-ovsi="${si}" title="click to edit the mark or override it">${st.marks[d.c.id]??'—'}</td>`; }).join('')
+        return `<td class="gcell${i===0?' gsep':''}${g!=null&&g<(+d.c.max>0?+d.c.max/2:50)?' fail':''}" data-ovcol="${d.c.id}" data-ovsi="${si}" title="click to edit the mark or override it">${st.marks[d.c.id]??'—'}</td>`; }).join('')
       +`<td class="gsep note${tt&&tt.capsHit&&tt.capsHit.length?' ovin':''}"${tt&&tt.capsHit&&tt.capsHit.length?` title="subject to a cap rule: ${esc(tt.capsHit.map(r=>`${r.cond} → at most ${r.to}`).join(' · '))}"`:''}>${tt?tt.raw:''}</td>
       <td class="gcell${gradeTint}"${!gradeTint&&tt?cls:''} data-ovcol="__total__" data-ovsi="${si}" title="${esc(gradeTitle)}">${tt?(tt.overridden?`${tt.grade} <span class="gbwas">(was ${tt.computed})</span>`:tt.grade):''}</td>
       <td${cls}>${tt?letterOf(tt.grade):''}</td><td>${dnw?'<span class="dnw">DNW</span>':''}</td></tr>`;
@@ -707,7 +711,7 @@ function refresh(){
    to existing columns by title (then code) so imported marks snap into the
    scheme; unmatched components are created; extra columns are left alone. */
 function schemeOf(){
-  return {schemeVersion:1, cols:D.cols.map(c=>({id:c.id,title:c.title,code:c.code||'',formula:c.formula||'',weight:c.weight??null,parent:c.parent||null})),
+  return {schemeVersion:1, cols:D.cols.map(c=>({id:c.id,title:c.title,code:c.code||'',formula:c.formula||'',weight:c.weight??null,max:c.max??null,parent:c.parent||null})),
           rawFormula:D.rawFormula||'', gradeFormula:D.gradeFormula||'', notes:D.schemeNotes||'',
           capRules:(D.capRules||[]).map(r=>({cond:r.cond||'',to:r.to??null}))};
 }
@@ -720,7 +724,7 @@ function applyScheme(sch){
          ||(sc.code&&D.cols.find(x=>(x.code||'').toLowerCase()===String(sc.code).toLowerCase()));
     if(!c){ c={id:uid(),title:sc.title,code:'',formula:'',weight:null,parent:null}; D.cols.push(c); }
     idMap[sc.id]=c.id;
-    c.title=sc.title; c.code=sc.code||''; c.formula=sc.formula||''; c.weight=sc.weight??null;
+    c.title=sc.title; c.code=sc.code||''; c.formula=sc.formula||''; c.weight=sc.weight??null; c.max=(+sc.max>0)?+sc.max:null;
   }
   for(const sc of sch.cols){ const c=D.cols.find(x=>x.id===idMap[sc.id]); c.parent=sc.parent!=null?(idMap[sc.parent]||null):null; }
   const ordered=sch.cols.map(sc=>D.cols.find(x=>x.id===idMap[sc.id]));
@@ -907,6 +911,7 @@ document.addEventListener('change',e=>{
     else c.formula=t.value.trim();
     save(); render(); return; }
   if(d.cw!==undefined){ const c=D.cols.find(c=>c.id===d.cw); const v=parseFloat(t.value); c.weight=isFinite(v)?v:null; save(); render(); return; }
+  if(d.cmax!==undefined){ const c=D.cols.find(c=>c.id===d.cmax); const v=parseFloat(t.value); c.max=v>0?v:null; save(); render(); return; }
   if(d.rawform!==undefined){ D.rawFormula=t.value.trim(); save(); render(); return; }
   if(d.gradeform!==undefined){ D.gradeFormula=t.value.trim(); save(); render(); return; }
   if(d.schemenotes!==undefined){ D.schemeNotes=t.value.trim(); save(); return; }
