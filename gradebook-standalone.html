@@ -294,7 +294,7 @@ function letterOf(v){ if(v==null) return ''; return v>=90?'A+':v>=85?'A':v>=80?'
 function atBoundaryTop(v){ return v!=null&&BOUNDS.some(b=>v>=b-1&&v<b); }
 function applyScale(v,f){ const m=/scale\s*\(\s*(-?\d+(?:\.\d+)?)\s*\)/i.exec(f||''); if(!m) return v;
   return Math.min(100,Math.max(0,v*(1+(+m[1])/100))); }
-function applyBoost(v,f){ const m=/\+\s*boost\s*(?:\(\s*(\d+(?:\.\d+)?)\s*\))?/i.exec(f||''); if(!m) return {v,boosted:false};
+function applyBoost(v,f){ const m=/\bboost\s*(?:\(\s*(\d+(?:\.\d+)?)\s*\))?/i.exec(f||''); if(!m) return {v,boosted:false};
   const n=m[1]!=null?+m[1]:1;
   for(const b of BOUNDS) if(v>=b-n&&v<b) return {v:b,boosted:true};
   return {v,boosted:false}; }
@@ -312,6 +312,9 @@ function canon(f){
   t=t.replace(/\b(?:is\s+)?(?:less\s+than|below|under)\b/gi,' < ');
   t=t.replace(/\b(?:is\s+)?(?:greater\s+than|more\s+than|above|over)\b/gi,' > ');
   t=t.replace(/\b(?:is\s+equal\s+to|equal\s+to|equals)\b/gi,' == ');
+  t=t.replace(/\bround\s+up\b/gi,'roundup');
+  t=t.replace(/\bround\s+down\b/gi,'rounddown');
+  t=t.replace(/\bbump\s+((?:\d+(?:\.\d+)?)\s*->\s*(?:\d+(?:\.\d+)?)(?:\s*,\s*(?:\d+(?:\.\d+)?)\s*->\s*(?:\d+(?:\.\d+)?))*)/gi,'bump($1)');
   t=t.replace(/\bmove\s+(?:weight\s+)?to\s+([A-Za-z_][A-Za-z0-9_]*)/gi,'moveto($1)');
   t=t.replace(/\bif\s+(?!\()(.+?)\s*,\s*(.+?)\s*$/i,(m,a,b)=>`if(${a.trim()}, ${b.trim()})`);
   return t.replace(/\s+/g,' ').trim();
@@ -532,8 +535,8 @@ function totals(st){
   // COURSE GRADE formula first, then round to a whole number, then the
   // boosts/bumps formula (so BUMP(89->90) sees an integer to match)
   for(const stg of splitStages(D.gradeFormula||'')) applyStage(stg);
-  if(!rounded) g=Math.round(g);
   for(const stg of splitStages(D.boostFormula||'')) applyStage(stg);
+  if(!rounded) g=Math.round(g);          // whole number if nothing rounded explicitly
   // GRADE CAP RULES: policy hurdles as their own thing — when a rule's
   // condition holds, the grade is capped at the rule's value (min, so a
   // student already below the cap keeps their computed grade)
@@ -670,8 +673,8 @@ function render(){
       <td class="pctcol note" style="border:none" title="students this rule caps">${r?(nhit?`${nhit} Δ`:''):''}</td>
       <td class="statcol"></td><td class="statcol"></td><td class="statcol"></td><td class="statcol"></td>
       <td class="xcol">${(D.capRules&&D.capRules[ri])?`<button class="x" data-capdel="${ri}" title="remove this cap rule">×</button>`:''}</td></tr>`; }).join('')}
-    <tr><td class="gripcol"></td><td class="ctl"></td><td></td><td class="statcol"></td><td class="note">boosts/bumps</td>
-      <td colspan="2"><input class="${fmClass(D.boostFormula)}" data-boostform value="${esc(D.boostFormula||'')}" placeholder="e.g. BUMP(89->90,79->80) · +BOOST(1)" title="${esc(fmTitle(D.boostFormula,'boosts & bumps — BUMP(exact->new) · +BOOST(n) lifts to the next letter'))}"></td>
+    <tr><td class="gripcol"></td><td class="ctl"></td><td></td><td class="statcol"></td><td class="note">boost/bumps/rounds</td>
+      <td colspan="2"><input class="${fmClass(D.boostFormula)}" data-boostform value="${esc(D.boostFormula||'')}" placeholder="e.g. round up, bump 80->81, boost" title="${esc(fmTitle(D.boostFormula,'rounding, bumps & boosts — round up/down · bump 80->81 · boost (to the next letter)'))}"></td>
       <td class="statcol"></td><td class="statcol"></td><td class="statcol"></td><td class="statcol"></td>
       <td class="xcol"></td></tr>
     <tr><td class="gripcol"></td><td class="ctl"></td><td></td><td class="statcol"></td><td>COURSE GRADE</td>
