@@ -413,10 +413,11 @@ function totals(st){
   raw=applyScale(raw,rf);
   raw=Math.round(raw*10)/10;
   let g=raw;
-  // STAGES: 'ROUND()+BUMP(89->90); if(HW<40,45)' — semicolons separate stages,
-  // applied left to right; a stage is token ops (SCALE/ROUND/BUMP/BOOST) or an
+  // STAGES: 'ROUND()+BUMP(89->90,79->80), if(HW<40,45)' — TOP-LEVEL commas
+  // (outside any parentheses; semicolons work too) separate stages, applied
+  // left to right; a stage is token ops (SCALE/ROUND/BUMP/BOOST) or an
   // expression over this + codes (the hurdle if()s come after the rounding)
-  const stages=(D.gradeFormula||'').split(';').map(x=>x.trim()).filter(Boolean);
+  const stages=splitStages(D.gradeFormula||'');
   let rounded=false, boosted=false;
   const tokenOnly=x=>x.replace(/scale\s*\([^)]*\)/ig,'').replace(/bump\s*\([^)]*\)/ig,'')
     .replace(/\+?\s*boost\s*(\([^)]*\))?/ig,'').replace(/round(up|down)?\s*(\(\s*\))?/ig,'').replace(/[+\s]/g,'')==='';
@@ -439,6 +440,19 @@ function totals(st){
   const tov=st.ov&&st.ov.__total__;
   const grade=tov?Math.round(+tov.value):g;
   return {raw,grade,boosted:boosted&&!tov,overridden:!!tov,computed:g}; }
+// split on commas/semicolons at parenthesis depth 0 — the commas inside
+// BUMP(89->90,79->80) and if(HW<40,45) are payload, not separators
+function splitStages(src){
+  const out=[]; let depth=0, cur='';
+  for(const ch of src){
+    if(ch==='(') depth++;
+    else if(ch===')') depth=Math.max(0,depth-1);
+    if((ch===','||ch===';')&&depth===0){ out.push(cur); cur=''; continue; }
+    cur+=ch;
+  }
+  out.push(cur);
+  return out.map(x=>x.trim()).filter(Boolean);
+}
 function dnwOf(st){ const fin=D.cols.find(c=>/final\s*exam/i.test(c.title));
   return !!(fin&&+st.marks[fin.id]===0&&st.marks[fin.id]!==''&&st.marks[fin.id]!=null); }
 
