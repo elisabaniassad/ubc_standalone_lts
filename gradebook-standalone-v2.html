@@ -822,15 +822,21 @@ function parseSchemeText(txt){
 function applyScheme(sch){
   if(!sch||!Array.isArray(sch.cols)) throw new Error('not a scheme file');
   const norm=t=>String(t||'').toLowerCase().replace(/[^a-z0-9]/g,'');
-  const idMap={};
+  const idMap={}, used=new Set();
+  // codes are the real handles, so match on them FIRST; titles are the
+  // fallback — and each existing column may be claimed by only ONE scheme
+  // line, else 'TUTORIAL BONUS' and 'Tutorial Bonus' (same normalized title)
+  // both grab the same column and the tree mangles
   for(const sc of sch.cols){
-    let c=D.cols.find(x=>norm(x.title)===norm(sc.title))
-         ||(sc.code&&D.cols.find(x=>(x.code||'').toLowerCase()===String(sc.code).toLowerCase()));
+    let c=(sc.code&&D.cols.find(x=>!used.has(x.id)&&(x.code||'').toLowerCase()===String(sc.code).toLowerCase()))
+         ||D.cols.find(x=>!used.has(x.id)&&norm(x.title)===norm(sc.title));
     if(!c){ c={id:uid(),title:sc.title,code:'',formula:'',weight:null,parent:null}; D.cols.push(c); }
-    idMap[sc.id]=c.id;
+    used.add(c.id); idMap[sc.id]=c.id;
     c.title=sc.title; c.code=sc.code||''; c.formula=sc.formula||''; c.weight=sc.weight??null; c.max=(+sc.max>0)?+sc.max:null;
   }
-  for(const sc of sch.cols){ const c=D.cols.find(x=>x.id===idMap[sc.id]); c.parent=sc.parent!=null?(idMap[sc.parent]||null):null; }
+  for(const sc of sch.cols){ const c=D.cols.find(x=>x.id===idMap[sc.id]);
+    c.parent=sc.parent!=null?(idMap[sc.parent]||null):null;
+    if(c.parent===c.id) c.parent=null; }
   const ordered=sch.cols.map(sc=>D.cols.find(x=>x.id===idMap[sc.id]));
   D.cols=[...ordered, ...D.cols.filter(x=>!ordered.includes(x))];
   collapseAll();
