@@ -177,7 +177,7 @@ A <b>Final Exam</b> column scoring exactly 0 flags <b>DNW</b>.</p>
 
 <h2>Marks</h2>
 <div class="bar"><input type="search" id="filter" placeholder="Filter — name, student #, section, or a test: >50, 40..60, RAW=45, HW<40, capped, bumped, boosted, overridden, dnw"><span id="filtinfo" class="note"></span></div>
-<div style="overflow-x:auto"><div id="grid"></div></div>
+<div style="overflow-x:auto;padding-bottom:14px"><div id="grid"></div></div>
 
 <script>
 'use strict';
@@ -477,6 +477,7 @@ function dnwOf(st){ const fin=D.cols.find(c=>/final\s*exam/i.test(c.title));
   return !!(fin&&+st.marks[fin.id]===0&&st.marks[fin.id]!==''&&st.marks[fin.id]!=null); }
 
 /* ════ render ════ */
+function collapseAll(){ for(const c of D.cols) if(D.cols.some(x=>x.parent===c.id)) COLL.add(c.id); }
 function render(){
   for(const [id,f] of [['fsubj','subject'],['fnum','number'],['fsec','section'],['fterm','term']]){
     const fe=document.getElementById(id); if(fe) fe.value=D[f]||''; }
@@ -646,7 +647,7 @@ function render(){
           const ovIn=st.ov&&subtreeOf(d.c.id).some(k=>st.ov[k.id]);
           return `<td class="computed gcell${ovIn?' ovin':''}${i===0?' gsep':''}${g!=null&&g<(+d.c.max>0?+d.c.max/2:50)?' fail':''}${capSrc.has(d.c.id)?' capsrc':''}" data-ovcol="${d.c.id}" data-ovsi="${si}" title="${esc(d.c.title)} — folded from its indented components${ovIn?'; CONTAINS AN OVERRIDDEN GRADE':''}; click to override/exempt">${g??'—'}</td>`;
         }
-        return `<td class="gcell${i===0?' gsep':''}${g!=null&&g<(+d.c.max>0?+d.c.max/2:50)?' fail':''}${capSrc.has(d.c.id)?' capsrc':''}" data-ovcol="${d.c.id}" data-ovsi="${si}" title="click to edit the mark or override it">${st.marks[d.c.id]??'—'}</td>`; }).join('')
+        return `<td class="gcell${i===0?' gsep':''}${g!=null&&g<(+d.c.max>0?+d.c.max/2:50)?' fail':''}${capSrc.has(d.c.id)?' capsrc':''}" data-ovcol="${d.c.id}" data-ovsi="${si}" title="click to edit the mark or override it">${st.marks[d.c.id]!=null?Math.round(+st.marks[d.c.id]*100)/100:(g??'—')}</td>`; }).join('')
       +`<td class="gsep note${tt&&tt.capsHit&&tt.capsHit.length?' ovin':''}"${tt&&tt.capsHit&&tt.capsHit.length?` title="subject to a cap rule: ${esc(tt.capsHit.map(r=>`${r.cond} → at most ${r.to}`).join(' · '))}"`:''}>${tt?tt.raw:''}</td>
       <td class="gcell${gradeTint}"${!gradeTint&&tt?cls:''} data-ovcol="__total__" data-ovsi="${si}" title="${esc(gradeTitle)}">${tt?(tt.overridden?`${tt.grade} <span class="gbwas">(was ${tt.computed})</span>`:tt.grade):''}</td>
       <td${cls}>${tt?letterOf(tt.grade):''}</td><td>${dnw?'<span class="dnw">DNW</span>':''}</td></tr>`;
@@ -755,6 +756,7 @@ function applyScheme(sch){
   for(const sc of sch.cols){ const c=D.cols.find(x=>x.id===idMap[sc.id]); c.parent=sc.parent!=null?(idMap[sc.parent]||null):null; }
   const ordered=sch.cols.map(sc=>D.cols.find(x=>x.id===idMap[sc.id]));
   D.cols=[...ordered, ...D.cols.filter(x=>!ordered.includes(x))];
+  collapseAll();
   D.rawFormula=sch.rawFormula||''; D.gradeFormula=sch.gradeFormula||'';
   if(sch.notes!=null) D.schemeNotes=sch.notes;
   if(Array.isArray(sch.capRules)) D.capRules=sch.capRules.map(r=>({cond:r.cond||'',to:r.to??null}));
@@ -1031,7 +1033,7 @@ document.getElementById('jsonfile').addEventListener('change',e=>{
   r.onerror=()=>alert('Could not read that file.');
   r.onload=()=>{ try{ const d=sanitize(JSON.parse(r.result));
       if(!d||!Array.isArray(d.cols)||!Array.isArray(d.students)) throw new Error('not a gradebook data file');
-      D=d; save(); SERIES=null; render();
+      D=d; collapseAll(); save(); SERIES=null; render();
     }catch(err){ alert('Load failed: '+err.message); } };
   r.readAsText(f);
   e.target.value='';
@@ -1121,6 +1123,7 @@ document.addEventListener('click',e=>{
   if(e.target.id==='wipe'){ if(!confirm('Erase EVERYTHING stored in this browser for this gradebook?')) return;
     localStorage.removeItem(KEY); D={subject:'',number:'',section:'',term:'',cols:[],students:[],rawFormula:'',gradeFormula:''}; SERIES=null; render(); return; }
 });
+collapseAll();
 render();
 </script>
 </body>
