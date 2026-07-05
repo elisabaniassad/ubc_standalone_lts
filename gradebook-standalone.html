@@ -148,7 +148,7 @@
 </style>
 </head>
 <body>
-<h1>Informal grade combiner and checker <span class="note">— double check — this might be wrong. Everything stays on this machine; browser storage self-clears 2 hours after your last change (Download data to keep work longer); nothing leaves it except your exports.</span></h1>
+<h1>Informal grade combiner and checker <span class="note">— double check — this might be wrong. Everything stays on this machine; browser storage self-clears 2 hours after your last change (SAVE GRADES to keep work longer); nothing leaves it except your exports.</span></h1>
 
 <div class="setup bar">
   <label>Academic Period <input id="fterm" placeholder="2025-26 Winter Term 2 (UBC-V)" style="width:230px" title="copied into the Workday export exactly as typed"></label>
@@ -273,7 +273,7 @@ function sanitize(d){
   return d;
 }
 // while the page sits open, the STORED copy still expires (in-memory work is
-// untouched — Download data remains the real save)
+// untouched — SAVE GRADES remains the real save)
 setInterval(()=>{ try{ const x=JSON.parse(localStorage.getItem(KEY));
   if(x&&x.ts&&(Date.now()-x.ts)>=TTL) localStorage.removeItem(KEY); }catch(e){} }, 5*60*1000);
 let STORAGE_OK=true;
@@ -281,7 +281,7 @@ function save(){
   try{ localStorage.setItem(KEY, JSON.stringify({ts:Date.now(),d:D})); STORAGE_OK=true; }
   catch(e){ STORAGE_OK=false; }        // quota (file:// pages SHARE one origin's storage)
   const n=document.getElementById('storagenote');
-  if(n) n.innerHTML=STORAGE_OK?'':'<span class="err">Browser storage is full (local files share one quota), so changes are NOT auto-saved — use <b>Download data</b> to keep your work, and <b>Load data</b> to bring it back.</span>';
+  if(n) n.innerHTML=STORAGE_OK?'':'<span class="err">Browser storage is full (local files share one quota), so changes are NOT auto-saved — use <b>SAVE GRADES</b> to keep your work, and <b>IMPORT GRADES</b> to bring it back.</span>';
 }
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uid=()=>'c'+(D.cols.reduce((a,c)=>Math.max(a,+c.id.slice(1)||0),0)+1);
@@ -674,7 +674,7 @@ function render(){
     ${ovRows.join('')||'<tr><td colspan="3" class="note" style="border-color:#e6e6e6">none — click a grade in the marks table to add one</td></tr>'}</table>`;
   const schHead=`<tr><th class="gripcol" title="drag a row to reorder">↕</th><th class="ctl">indent</th><th class="codecol">Code</th><th class="statcol outof">out of</th><th>Component <button id="addcol" class="plus" title="add a component">+</button></th><th class="formcol">Formula <button type="button" id="fhintbtn" class="plus" title="formula reference">?</button></th><th class="pctcol">%</th><th class="statcol"><i>lowest</i></th><th class="statcol"><i>highest</i></th><th class="statcol"><i>median</i></th><th class="statcol"><i>average</i></th><th class="xcol"></th></tr>`;
   document.getElementById('calc').innerHTML=!D.cols.length
-    ?`<table class="scheme">${schHead}<tr><td colspan="12" class="note" style="text-align:center;padding:22px 12px">No grading scheme yet. Click <b>+</b> to add a component, or use <b>Import CSV</b> / <b>Load scheme</b> above.</td></tr></table>`
+    ?`<table class="scheme">${schHead}<tr><td colspan="12" class="note" style="text-align:center;padding:22px 12px">No grading scheme yet. Click <b>+</b> to add a component, or use <b>IMPORT GRADES</b> / <b>IMPORT SCHEME</b> above.</td></tr></table>`
     :`<table class="scheme">
     ${schHead}
     ${ordered.map(rowOf).join('')}
@@ -780,7 +780,7 @@ function render(){
   }).join('');
   document.getElementById('grid').innerHTML=D.cols.length||D.students.length
     ?`<table id="gbtable"><thead>${selRow}${avgRow}${histRow}${sup}${subh}</thead><tbody>${body}</tbody></table>`
-    :'<p class="note">Nothing here yet — Import CSV, or add a column and a student.</p>';
+    :'<p class="note">Nothing here yet — IMPORT GRADES, or add a column and a student.</p>';
   refresh();
 }
 /* first/last: the CSV keeps them separate; the grid shows "First Last" in one cell */
