@@ -386,12 +386,13 @@ function render(){
   // display columns: each top-level's CHILDREN (editable), then the parent
   // (computed fold); childless top-levels are plain mark columns
   const DISP=[];
-  // post-order at any depth: a node's subtree columns first, then its fold
+  // PRE-order, matching the calculation table's outline: the container's
+  // fold first, then the components indented under it
   D.cols.filter(c=>!c.parent).forEach(function walk(n){
     const nk=D.cols.filter(x=>x.parent===n.id);
     if(!nk.length){ DISP.push({c:n,computed:false}); return; }
-    if(!COLL.has(n.id)) nk.forEach(walk);
     DISP.push({c:n,computed:true});
+    if(!COLL.has(n.id)) nk.forEach(walk);
   });
   const csep=i=>i===0?' class="gsep"':'';
   const sub=(name,cell,course)=>`<tr class="sub">${lbl(name)}${DISP.map((d,i)=>`<td${csep(i)}>${cell(d.c,i)}</td>`).join('')}${course}</tr>`;
