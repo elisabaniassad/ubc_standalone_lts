@@ -188,8 +188,7 @@
     <h2>Grade distribution</h2>
     <div class="histcard">
       <div id="histstats" style="font-weight:600; margin-bottom:6px"></div>
-      <div class="bar"><label>Buckets <select id="bucket"><option value="5">5%</option><option value="10">10%</option><option value="20">20%</option><option value="LETTER" selected>Letter (UBC)</option></select></label>
-      <span class="note">Toggle series in the table's "In chart" row.</span></div>
+      <div class="bar"><span class="note">Toggle series in the table's "In chart" row.</span><label style="margin-left:auto">Buckets <select id="bucket"><option value="5">5%</option><option value="10">10%</option><option value="20">20%</option><option value="LETTER" selected>Letter (UBC)</option></select></label></div>
       <div id="chart"></div>
     </div>
   </div>
@@ -659,11 +658,11 @@ function render(){
     <p><input data-schemenotes value="${esc(D.schemeNotes||'')}" placeholder="scheme notes (pass criteria, hurdles, policies — travels with the scheme file)" style="width:100%;border:1px solid var(--shade);padding:4px 8px;color:var(--muted)"></p>`;
   document.getElementById('ovmount').innerHTML=ovTable;
   const selRow=sub('In chart',(c,i)=>`<span class="gbck${SERIES.has(c.id)?' on':''}" data-ck="${c.id}"><span class="dot" style="background:${color(i)}"></span></span>`,
-    `<td class="gsep gbck${SERIES.has('__total__')?' on':''}" data-ck="__total__"><span class="dot" style="background:#444"></span></td><td></td><td></td><td></td>`);
+    `<td class="gsep gbck${SERIES.has('__raw__')?' on':''}" data-ck="__raw__"><span class="dot" style="background:#999"></span></td><td class="gbck${SERIES.has('__total__')?' on':''}" data-ck="__total__"><span class="dot" style="background:#444"></span></td><td></td><td></td>`);
   const avgRow=sub('Average',c=>`<span data-avg="${c.id}"></span>`,
     `<td class="gsep"><span data-avg="__raw__"></span></td><td><span data-avg="__total__"></span></td><td></td><td></td>`);
   const histRow=sub('Histogram',c=>`<span data-hist="${c.id}"></span>`,
-    `<td class="gsep"></td><td><span data-hist="__total__"></span></td><td></td><td></td>`);
+    `<td class="gsep"><span data-hist="__raw__"></span></td><td><span data-hist="__total__"></span></td><td></td><td></td>`);
   const tops=D.cols.filter(c=>!c.parent);
   const groupThs=tops.map(t=>{
     const span=DISP.filter(d=>d.c.id===t.id||inSubtree(t.id,d.c)).length;
@@ -806,7 +805,7 @@ function refresh(){
     }
   }
   const PAL=['#6fa8dc','#bda1cb','#93c47d','#e0a800','#76a5af','#c27ba0','#8e7cc3','#dd7e6b','#6aa84f','#a4c2f4','#f6b26b','#999999'];
-  const series=[...D.cols.map((c,i)=>({id:c.id,label:c.title,color:PAL[i%PAL.length]})),{id:'__total__',label:'Grade',color:'#444'}].filter(x=>SERIES.has(x.id));
+  const series=[...D.cols.map((c,i)=>({id:c.id,label:c.title,color:PAL[i%PAL.length]})),{id:'__raw__',label:'Raw',color:'#999'},{id:'__total__',label:'Grade',color:'#444'}].filter(x=>SERIES.has(x.id));
   /* (chart series ids unchanged — parents chart their folded value) */
   // with a filter on, the chart keeps the WHOLE cohort as context and picks
   // out the matching students' share of each bar in gold
