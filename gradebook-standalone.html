@@ -8,7 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,400;0,600;0,700&display=swap" rel="stylesheet">
 <style>
   /* ── the Lifeboat gradebook, standalone: one file, no server, your machine.
-     Data lives in THIS browser's localStorage; export takes it out. ── */
+     Data lives in THIS tab's sessionStorage (per-tab, cleared on close); export takes it out. ── */
   :root { --line:#111; --muted:#777; --bg:#fff; --shade:#f2f2f2; }
   * { margin:0; }
   body { font-family:'Source Sans 3', -apple-system, 'Segoe UI', sans-serif; font-size:14px;
@@ -148,7 +148,7 @@
 </style>
 </head>
 <body>
-<h1>Informal grade combiner and checker <span class="note">— double check — this might be wrong. Everything stays on this machine; browser storage self-clears 2 hours after your last change (SAVE GRADES to keep work longer); nothing leaves it except your exports.</span></h1>
+<h1>Informal grade combiner and checker <span class="note">— double check — this might be wrong. Everything stays on this machine; each browser tab is its own private session — nobody else sees your data, and it clears when you close the tab (or after 2 hours idle). SAVE GRADES to keep your work; nothing leaves this machine except your exports.</span></h1>
 
 <div class="setup bar">
   <label>Academic Period <input id="fterm" placeholder="2025-26 Winter Term 2 (UBC-V)" style="width:230px" title="copied into the Workday export exactly as typed"></label>
@@ -204,7 +204,7 @@ Load or save a grading scheme — a set of formulas for calculating grades.</p>
          cols:[{id,title,code,formula,weight,parent}],   parent = a col id -> this row is
          students:[{snum,…,marks:{colId}}],              indented under it; a parent's value
          rawFormula, gradeFormula }                      aggregates its children per its
-   — persisted to localStorage (2h TTL).                 formula (DROP(LOWEST), SUM, AVG…) */
+   — persisted to sessionStorage (2h TTL).                 formula (DROP(LOWEST), SUM, AVG…) */
 const KEY='gradebook-standalone.v1';
 const TTL=2*60*60*1000;                   // grade data self-destructs after 2 hours
 let D=load()||{subject:'',number:'',section:'',term:'',cols:[],students:[],rawFormula:'',gradeFormula:'',boostFormula:''};
@@ -212,10 +212,10 @@ if(D.code&&!D.subject){ const m=/^(.*\S)\s+(\S+)$/.exec(D.code); D.subject=m?m[1
 let SERIES=null, FILTER='', BUCKET='LETTER', SORT=null, STUCOL=false; const COLL=new Set();
 function load(){
   try{
-    const x=JSON.parse(localStorage.getItem(KEY));
+    const x=JSON.parse(sessionStorage.getItem(KEY));
     if(x&&x.d&&x.ts&&(Date.now()-x.ts)<TTL) return sanitize(x.d);
   }catch(e){}
-  localStorage.removeItem(KEY);           // expired (or the old un-stamped format)
+  sessionStorage.removeItem(KEY);           // expired (or the old un-stamped format)
   return null;
 }
 // old sessions (pre-hierarchy, pre-Workday-fields) get coerced into the
@@ -274,14 +274,14 @@ function sanitize(d){
 }
 // while the page sits open, the STORED copy still expires (in-memory work is
 // untouched — SAVE GRADES remains the real save)
-setInterval(()=>{ try{ const x=JSON.parse(localStorage.getItem(KEY));
-  if(x&&x.ts&&(Date.now()-x.ts)>=TTL) localStorage.removeItem(KEY); }catch(e){} }, 5*60*1000);
+setInterval(()=>{ try{ const x=JSON.parse(sessionStorage.getItem(KEY));
+  if(x&&x.ts&&(Date.now()-x.ts)>=TTL) sessionStorage.removeItem(KEY); }catch(e){} }, 5*60*1000);
 let STORAGE_OK=true;
 function save(){
-  try{ localStorage.setItem(KEY, JSON.stringify({ts:Date.now(),d:D})); STORAGE_OK=true; }
-  catch(e){ STORAGE_OK=false; }        // quota (file:// pages SHARE one origin's storage)
+  try{ sessionStorage.setItem(KEY, JSON.stringify({ts:Date.now(),d:D})); STORAGE_OK=true; }
+  catch(e){ STORAGE_OK=false; }        // quota exceeded for this tab's session store
   const n=document.getElementById('storagenote');
-  if(n) n.innerHTML=STORAGE_OK?'':'<span class="err">Browser storage is full (local files share one quota), so changes are NOT auto-saved — use <b>SAVE GRADES</b> to keep your work, and <b>IMPORT GRADES</b> to bring it back.</span>';
+  if(n) n.innerHTML=STORAGE_OK?'':'<span class="err">This tab's storage is full, so changes are NOT auto-saved — use <b>SAVE GRADES</b> to keep your work, and <b>IMPORT GRADES</b> to bring it back.</span>';
 }
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uid=()=>'c'+(D.cols.reduce((a,c)=>Math.max(a,+c.id.slice(1)||0),0)+1);
@@ -1349,7 +1349,7 @@ document.addEventListener('click',e=>{
     a.click(); URL.revokeObjectURL(a.href); return; }
   if(e.target.id==='wd'){ exportWD(); return; }
   if(e.target.id==='wipe'){ if(!confirm('Erase EVERYTHING stored in this browser for this gradebook?')) return;
-    localStorage.removeItem(KEY); D={subject:'',number:'',section:'',term:'',cols:[],students:[],rawFormula:'',gradeFormula:'',boostFormula:''}; SERIES=null; render(); return; }
+    sessionStorage.removeItem(KEY); D={subject:'',number:'',section:'',term:'',cols:[],students:[],rawFormula:'',gradeFormula:'',boostFormula:''}; SERIES=null; render(); return; }
 });
 collapseAll();
 render();
