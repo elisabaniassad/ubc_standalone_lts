@@ -631,11 +631,18 @@ function render(){
       :tt.boosted?'lifted by BOOST — click to override'
       :tt.bumped?'lifted by a BUMP pair — click to override'
       :'click to set this student\u2019s course grade (the discretionary cap/fail — reason required)';
+    // identity is locked once a student has a number — inputs exist only so a
+    // hand-added blank row can be filled in
     const roster=STUCOL
       ?`<td>${esc(nameOf(st)||st.snum||'—')}</td>`
-      :`<td><input data-sf="first" data-si="${si}" value="${esc(st.first||'')}" style="border:none;background:transparent;font:inherit;width:90px"></td>
-      <td><input data-sf="snum" data-si="${si}" value="${esc(st.snum||'')}" style="border:none;background:transparent;font:inherit;width:80px"></td>
-      <td><input data-sf="section" data-si="${si}" value="${esc(st.section||'')}" style="border:none;background:transparent;font:inherit;width:50px"></td>
+      :String(st.snum||'').trim()
+      ?`<td>${esc(nameOf(st)||'—')}</td>
+      <td>${esc(st.snum)}</td>
+      <td>${esc(st.section||'')}</td>
+      <td><button class="x" data-delstu="${si}" title="remove student">×</button></td>`
+      :`<td><input data-sf="first" data-si="${si}" value="${esc(st.first||'')}" placeholder="name" style="border:none;background:transparent;font:inherit;width:90px"></td>
+      <td><input data-sf="snum" data-si="${si}" value="" placeholder="student #" style="border:none;background:transparent;font:inherit;width:80px"></td>
+      <td><input data-sf="section" data-si="${si}" value="${esc(st.section||'')}" placeholder="sec" style="border:none;background:transparent;font:inherit;width:50px"></td>
       <td><button class="x" data-delstu="${si}" title="remove student">×</button></td>`;
     return `<tr data-row="${si}">${roster}`
       +DISP.map((d,i)=>{ const g=colGrade(st,d.c);
