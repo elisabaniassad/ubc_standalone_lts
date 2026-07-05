@@ -239,8 +239,10 @@ function evalExpr(value,src,lookup){
       if(f==='or'){ for(const a of args) if(typeof a==='number'&&isFinite(a)) return a; return NaN; }   // or(TB,0): first value that exists
       if(f==='if') return (args[0]&&args[0]!==0&&args[0]!==false)?(args[1]??value):(args[2]??value);
       if(f==='clamp') return Math.min(args[2]??100,Math.max(args[1]??0,args[0]));
-      if(f==='min') return Math.min(...args);
-      if(f==='max') return Math.max(...args);
+      // min/max IGNORE blanks (a blank reference is absent, not zero) —
+      // so MAX(TB,0) means what it looks like even when TB is empty
+      if(f==='min'){ const xs=args.filter(a=>typeof a==='number'&&isFinite(a)); return xs.length?Math.min(...xs):NaN; }
+      if(f==='max'){ const xs=args.filter(a=>typeof a==='number'&&isFinite(a)); return xs.length?Math.max(...xs):NaN; }
       if(f==='round') return Math.round(args[0]);
       if(f==='roundup') return Math.ceil(args[0]);
       if(f==='rounddown') return Math.floor(args[0]);
