@@ -31,7 +31,7 @@
            padding:4px 8px; text-align:center; font-weight:400; }
   .setup input { border:1px solid var(--line); padding:4px 8px; }
   .bar { display:flex; gap:10px; align-items:center; margin:8px 0; flex-wrap:wrap; }
-  .bar input[type=search] { flex:1; max-width:460px; padding:5px 8px; border:1px solid var(--line); }
+  .bar input[type=search] { flex:1; max-width:780px; padding:5px 8px; border:1px solid var(--line); }
   .dark { background:var(--line); color:#fff; border:none; text-transform:uppercase; font-weight:600; letter-spacing:.06em; padding:7px 12px; }
   .dark:hover { background:#333; }
   /* the grid — the CML look */
@@ -67,6 +67,9 @@
   .dnw { color:#b3392b; font-weight:700; font-size:11px; }
   .hiddenrow { display:none; }
   .histcard { border:1px solid var(--line); padding:10px 12px; margin:6px 0 14px; }
+  .chartlegend { display:flex; flex-wrap:wrap; gap:14px; margin-bottom:8px; font-size:11px; color:var(--muted); }
+  .leg { display:inline-flex; align-items:center; gap:5px; }
+  .legdot { width:10px; height:10px; display:inline-block; border:1px solid var(--line); }
   #chart { display:flex; gap:10px; align-items:flex-end; min-height:90px; }
   .bkt { display:flex; flex-direction:column; align-items:center; gap:2px; flex:1 1 0; min-width:0; }
   .bars { display:flex; gap:2px; align-items:flex-end; height:92px; justify-content:center; width:100%; }
@@ -138,6 +141,8 @@
   .ovcard select { max-width:100%; }
   /* live sample columns: see the formulas WORK as you type them */
   table.scheme td.statcol, table.scheme th.statcol { width:4.5%; text-align:center; color:var(--muted); }
+  table.scheme th.outof { font-size:9px; font-weight:400; text-transform:none; }
+  table.scheme th.statcol i { font-style:italic; font-weight:400; }
   table.scheme tr.dragover { outline:2px dashed var(--line); outline-offset:-2px; }
   #gbtable td.computed { color:var(--muted); }
 </style>
@@ -151,7 +156,6 @@
   <label>Course Number <input id="fnum" placeholder="210" style="width:60px"></label>
   <label>Section Number <input id="fsec" placeholder="101" style="width:60px" title="used for students whose row has no section"></label>
   <span style="flex:1"></span>
-  <button id="addstu">+ student</button>
   <input type="file" id="csvfile" accept=".csv" style="display:none">
   <button id="importbtn" title="CSV: Student #, First, Last, Section (optional), then one column per assessment">Import CSV</button>
   <input type="file" id="jsonfile" accept=".json" style="display:none">
@@ -169,8 +173,8 @@
 <h2>Overall grade calculation</h2>
 <div id="calc"></div>
 <div id="fhintbox" class="note" style="display:none;border:1px solid var(--line);padding:10px 14px;margin:6px 0 0;max-width:1080px;line-height:1.8;font-size:12px">
-  <b>Formula reference</b> &nbsp;<span class="note">(<code>x</code> = this cell; <code>a</code>, <code>b</code>, … = other columns' codes)</span><br>
-  <b>Per component</b> — <code>SCALE(n)</code> scale by n% · <code>if(cond, a, b)</code> · <code>clamp(x, lo, hi)</code> · <code>min/max/round(x)</code> · arithmetic on <code>x</code> and codes · a leading <code>+</code> prepends <code>x</code><br>
+  <b>Formula reference</b> &nbsp;<span class="note">(<code>this</code> = this cell; <code>a</code>, <code>b</code>, … = other columns' codes)</span><br>
+  <b>Per component</b> — <code>SCALE(n)</code> scale by n% · <code>if(cond, a, b)</code> · <code>clamp(this, lo, hi)</code> · <code>min/max/round(this)</code> · arithmetic on <code>this</code> and codes · a leading <code>+</code> prepends <code>this</code><br>
   <b>Parent fold</b> — <code>DROP(LOWEST[,n])</code> / <code>DROP(HIGHEST[,n])</code> · <code>KEEP(a)</code> shields a code from the drop · <code>SUM</code> · <code>MAX</code> · <code>MIN</code> · <code>WAVG(a,b,…)</code> mean weighted by each code's %<br>
   <b>Grade</b> (stages, comma-separated) — <code>ROUND()</code> · <code>ROUNDUP</code> / <code>ROUNDDOWN</code> · <code>BOOST(n)</code> lift to a letter boundary within n · <code>BUMP(a-&gt;b, …)</code> remap exact values<br>
   <b>Missing values</b> — <code>or(a, b)</code> first that exists · <code>orzero(a)</code> = <code>or(a, 0)</code><br>
@@ -579,8 +583,8 @@ function render(){
       <td class="ctl">${ind}</td>
       <td><input data-ccode="${c.id}" value="${esc(c.code||'')}" placeholder="—" style="text-align:center"></td>
       <td style="padding-left:${8+depth*24}px"><span style="display:flex;align-items:center"><input data-ctitle="${c.id}" value="${esc(c.title)}" style="flex:1;width:auto">${tri}</span></td>
+      <td class="statcol"><input data-cmax="${c.id}" value="${esc(c.max??'')}" inputmode="decimal" placeholder="100" title="out of — what this column is scored out of; half of it draws the fail line" style="width:100%;text-align:center;border:none;background:transparent;font-size:10px;color:var(--muted)"></td>
       <td><input class="${fmClass(c.formula)}" data-cform="${c.id}" value="${esc(c.formula||'')}" placeholder="—" title="${esc(fmTitle(c.formula, parent?'folds the indented children: DROP(LOWEST[,n]) · DROP(HIGHEST[,n]) · SUM · MAX · MIN · then SCALE(n)/expressions':"SCALE(10) · if(this>89,100) · clamp(this,0,100) · other columns' codes"))}"></td>
-      <td class="statcol"><input data-cmax="${c.id}" value="${esc(c.max??'')}" inputmode="decimal" placeholder="100" title="max grade — what this column is out of; half of it draws the fail line" style="width:100%;text-align:center;border:none;background:transparent;font:inherit;color:inherit"></td>
       <td class="pctcol"><input class="wpct" data-cw="${c.id}" value="${esc(c.weight??'')}" inputmode="decimal" placeholder="${child?'eq':''}" title="${child?'share WITHIN '+esc((D.cols.find(x=>x.id===c.parent)||{}).title||'the parent')+' — blank = equal weighting (the default); the parent\'s formula can change how they combine':'% of course grade'}">%</td>
       ${statCells(compStats(c))}
       <td class="xcol"><button class="x" data-delcol="${c.id}" title="remove ${esc(c.title)}${parent?' (its children become top-level)':' and its marks'}">×</button></td></tr>`; };
@@ -601,35 +605,30 @@ function render(){
   }});
   const ovTable=`<table class="ovtable"><tr><th class="sid">Student ID</th><th>Change</th><th>Reason</th></tr>
     ${ovRows.join('')||'<tr><td colspan="3" class="note" style="border-color:#e6e6e6">none — click a grade in the marks table to add one</td></tr>'}</table>`;
-  const schHead=`<tr><th class="gripcol" title="drag a row to reorder">↕</th><th class="ctl">indent</th><th class="codecol">Code</th><th>Component <button id="addcol" class="plus" title="add a component">+</button></th><th class="formcol">Formula <button type="button" id="fhintbtn" class="plus" title="formula reference">?</button></th><th class="statcol">MAX</th><th class="pctcol">%</th><th class="statcol">LOW</th><th class="statcol">HIGH</th><th class="statcol">MED</th><th class="statcol">AVG</th><th class="xcol"></th></tr>`;
+  const schHead=`<tr><th class="gripcol" title="drag a row to reorder">↕</th><th class="ctl">indent</th><th class="codecol">Code</th><th>Component <button id="addcol" class="plus" title="add a component">+</button></th><th class="statcol outof">out of</th><th class="formcol">Formula <button type="button" id="fhintbtn" class="plus" title="formula reference">?</button></th><th class="pctcol">%</th><th class="statcol"><i>lowest</i></th><th class="statcol"><i>highest</i></th><th class="statcol"><i>median</i></th><th class="statcol"><i>average</i></th><th class="xcol"></th></tr>`;
   document.getElementById('calc').innerHTML=!D.cols.length
     ?`<table class="scheme">${schHead}<tr><td colspan="12" class="note" style="text-align:center;padding:22px 12px">No grading scheme yet. Click <b>+</b> to add a component, or use <b>Import CSV</b> / <b>Load scheme</b> above.</td></tr></table>`
     :`<table class="scheme">
     ${schHead}
     ${ordered.map(rowOf).join('')}
     <tr><td class="gripcol"></td><td class="ctl"></td><td></td><td>RAW</td>
-      <td><input class="${fmClass(D.rawFormula)}" data-rawform value="${esc(D.rawFormula||'')}" placeholder="weighted sum" title="${esc(fmTitle(D.rawFormula,'Raw formula — e.g. this+or(TB,0)'))}"></td>
-      <td class="pctcol"></td>
-      <td class="statcol"></td>
+      <td colspan="2"><input class="${fmClass(D.rawFormula)}" data-rawform value="${esc(D.rawFormula||'')}" placeholder="weighted sum" title="${esc(fmTitle(D.rawFormula,'Raw formula — e.g. this+or(TB,0)'))}"></td>
+      <td class="pctcol${sumOk?'':' err'}" title="sum of the component weights — reaches 100 when the scheme is complete">${Math.round(wsum*10)/10}/100</td>
       ${statCells(statsOf(D.students.map(st=>{ const t=totals(st); return t?t.raw:null; })))}
       <td class="xcol"></td></tr>
     ${((D.capRules||[]).length?D.capRules:[null]).map((r,ri)=>{
       const nhit=r?D.students.filter(st=>{ const t=totals(st); return t&&t.capsHit.includes(r); }).length:0;
       return `<tr><td class="gripcol"></td><td class="ctl"></td><td></td>
       <td class="note" style="white-space:nowrap">GRADE CAP RULE${ri===0?' <button id="capadd" class="plus" title="add a cap rule">+</button>':''}</td>
-      <td>${r?`<span class="note">if</span> <input class="${fmClass('if('+(r.cond||'this')+',1,0)')}" data-capcond="${ri}" value="${esc(r.cond||'')}" placeholder="e.g. WAVG(T1,T2,T3,FIN)<50" title="${esc(fmTitle('if('+(r.cond||'this')+',1,0)','a condition over codes — matching students show an orange Raw and are capped'))}" style="width:46%"> <span class="note" style="font-size:10px;white-space:nowrap">→ max course grade</span> <input data-capto="${ri}" value="${esc(r.to??'')}" inputmode="decimal" style="width:40px">${isFinite(+r.to)&&r.to!=null&&r.to!==''?` <span class="note" style="font-size:10px">(${letterOf(+r.to)})</span>`:''}`
+      <td colspan="2">${r?`<span class="note">if</span> <input class="${fmClass('if('+(r.cond||'this')+',1,0)')}" data-capcond="${ri}" value="${esc(r.cond||'')}" placeholder="e.g. WAVG(T1,T2,T3,FIN)<50" title="${esc(fmTitle('if('+(r.cond||'this')+',1,0)','a condition over codes — matching students show an orange Raw and are capped'))}" style="width:46%"> <span class="note" style="font-size:10px;white-space:nowrap">→ max course grade</span> <input data-capto="${ri}" value="${esc(r.to??'')}" inputmode="decimal" style="width:40px">${isFinite(+r.to)&&r.to!=null&&r.to!==''?` <span class="note" style="font-size:10px">(${letterOf(+r.to)})</span>`:''}`
       :'<span class="note">policy hurdles — e.g. if HW&lt;40, the grade is at most 45</span>'}</td>
-      <td class="statcol"></td>
       <td class="pctcol note" title="students this rule caps">${r?(nhit?`${nhit} \u0394`:''):''}</td>
       <td class="statcol"></td><td class="statcol"></td><td class="statcol"></td><td class="statcol"></td>
       <td class="xcol">${r?`<button class="x" data-capdel="${ri}" title="remove this cap rule">×</button>`:''}</td></tr>`; }).join('')}
     <tr><td class="gripcol"></td><td class="ctl"></td><td></td><td>GRADE</td>
-      <td><input class="${fmClass(D.gradeFormula)}" data-gradeform value="${esc(D.gradeFormula||'')}" placeholder="—" title="${esc(fmTitle(D.gradeFormula,'Grade formula (optional) — e.g. ROUND()+BOOST'))}"></td>
-      <td class="pctcol"></td>
-      <td class="statcol"></td>
+      <td colspan="3"><input class="${fmClass(D.gradeFormula)}" data-gradeform value="${esc(D.gradeFormula||'')}" placeholder="—" title="${esc(fmTitle(D.gradeFormula,'Grade formula (optional) — e.g. ROUND()+BOOST'))}"></td>
       ${statCells(statsOf(D.students.map(st=>{ const t=totals(st); return t?t.grade:null; })))}
-      <td class="xcol"></td></tr>
-    <tr class="totalrow"><td class="gripcol"></td><td class="ctl"></td><td></td><td>TOTAL</td><td></td><td class="statcol"></td><td class="pctcol${sumOk?'':' err'}">${Math.round(wsum*10)/10}%</td><td class="statcol"></td><td class="statcol"></td><td class="statcol"></td><td class="statcol"></td><td class="xcol"></td></tr></table>
+      <td class="xcol"></td></tr></table>
     <p><input data-schemenotes value="${esc(D.schemeNotes||'')}" placeholder="scheme notes (pass criteria, hurdles, policies — travels with the scheme file)" style="width:100%;border:1px solid var(--shade);padding:4px 8px;color:var(--muted)"></p>`;
   document.getElementById('ovmount').innerHTML=ovTable;
   const selRow=sub('In chart',(c,i)=>`<span class="gbck${SERIES.has(c.id)?' on':''}" data-ck="${c.id}"><span class="dot" style="background:${color(i)}"></span></span>`,
@@ -647,9 +646,10 @@ function render(){
     return `<th class="gcat${hasKids?' togglable':''}"${hasKids?` data-tog="${t.id}"`:''} colspan="${span}">${tog}${esc(t.title)}</th>`;
   }).join('');
   let sup=`<tr><th class="gcat togglable" data-stutog colspan="${rosterN}"><span class="gtog">${STUCOL?'+':'−'}</span> Students</th>${groupThs||`<th class="gcat">—</th>`}<th class="gcat gsep" colspan="4">Course Grade</th></tr>`;
+  const addStuBtn=`<button id="addstu" class="plus" title="add a student" style="float:right">+</button>`;
   let subh=`<tr class="subhead">`+(STUCOL
-    ?`<th class="sortable" data-sort="__name__">Name</th>`
-    :`<th class="sortable" data-sort="__name__">Name</th><th class="sortable" data-sort="__snum__">Student #</th><th>Section</th>`)
+    ?`<th class="sortable" data-sort="__name__">Name ${addStuBtn}</th>`
+    :`<th class="sortable" data-sort="__name__">Name</th><th class="sortable" data-sort="__snum__">Student # ${addStuBtn}</th><th>Section</th>`)
     +DISP.map((d,i)=>`<th class="sortable${i===0?' gsep':''}" data-sort="${d.c.id}">${d.computed?`<button class="tri" data-tog="${d.c.id}" style="font-size:13px;padding:0 4px;margin-left:0">${COLL.has(d.c.id)?'▸':'▾'}</button>`:''}${esc(d.c.title)}${d.c.code?` <span class="note">[${esc(d.c.code)}]</span>`:''}</th>`).join('')
     +`<th class="gsep sortable" data-sort="__raw__">Raw</th><th class="sortable" data-sort="__total__">Grade</th><th>Letter</th><th>Note</th></tr>`;
   const body=D.students.map((st,si)=>{
@@ -789,9 +789,10 @@ function refresh(){
     counts:bks.map(b=>cnt(isFilt?D.students:vis,sr.id,b)),
     sel:isFilt?bks.map(b=>cnt(vis,sr.id,b)):null}));
   const mx=Math.max(1,...data.flatMap(d=>d.counts));
+  const legend=`<div class="chartlegend">${series.map(sr=>`<span class="leg"><span class="legdot" style="background:${sr.color}"></span>${esc(sr.label)}</span>`).join('')}</div>`;
   document.getElementById('chart').innerHTML=(!D.students.length||!data.length)
     ?'<p class="note">No grades in view yet.</p>'
-    :bks.map((b,i)=>`<div class="bkt"><div class="bars">${data.map(d=>{
+    :legend+bks.map((b,i)=>`<div class="bkt"><div class="bars">${data.map(d=>{
       const n=d.counts[i], m=d.sel?d.sel[i]:0;
       const hpx=Math.round(n/mx*76)+1, gpx=m?Math.min(hpx,Math.round(m/mx*76)+1):0;
       return `<span class="bcol" title="${esc(d.sr.label)}: ${n}${m?` (${m} match the filter)`:''}"><span class="bn">${n||''}</span><span class="bfill" style="height:${hpx}px;background:${d.sr.color}">${gpx?`<span class="bsel" style="height:${gpx}px"></span>`:''}</span></span>`;
@@ -1243,7 +1244,7 @@ document.addEventListener('click',e=>{
   const ds=e.target.closest('[data-delstu]');
   if(ds){ if(!confirm('Remove this student?')) return; D.students.splice(+ds.dataset.delstu,1); save(); render(); return; }
   const so=e.target.closest('th.sortable');
-  if(so&&!e.target.closest('input')){ const k=so.dataset.sort;
+  if(so&&!e.target.closest('input')&&!e.target.closest('button')){ const k=so.dataset.sort;
     SORT=(SORT&&SORT.k===k)?{k,asc:!SORT.asc}:{k,asc:k==='__name__'};
     const val=st=>k==='__name__'?nameOf(st):k==='__snum__'?(st.snum||''):colVal(k,st);
     D.students.sort((a,b)=>{ let va=val(a),vb=val(b);
