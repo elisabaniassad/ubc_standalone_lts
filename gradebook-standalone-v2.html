@@ -175,7 +175,7 @@ A <b>Final Exam</b> column scoring exactly 0 flags <b>DNW</b>.</p>
 </div>
 
 <h2>Marks</h2>
-<div class="bar"><input type="search" id="filter" placeholder="Filter — name, student #, section, dnw, or a grade test on the total (>50, 40..60, ==0)"><span id="filtinfo" class="note"></span></div>
+<div class="bar"><input type="search" id="filter" placeholder="Filter — name, student #, section, or a test: >50, 40..60, RAW=45, HW<40, capped, bumped, boosted, overridden, dnw"><span id="filtinfo" class="note"></span></div>
 <div style="overflow-x:auto"><div id="grid"></div></div>
 
 <script>
@@ -661,6 +661,24 @@ function visible(){
     const n=+m[2]; return m[1]==='>'?v>n:m[1]==='>='?v>=n:m[1]==='<'?v<n:m[1]==='<='?v<=n:v===n; });
   const t=q.toLowerCase();
   if(t==='dnw') return D.students.filter(dnwOf);
+  // status words: who got moved by which mechanism
+  const flag={capped:x=>x.capped, bumped:x=>x.bumped&&!x.capped&&!x.overridden,
+              boosted:x=>x.boosted&&!x.capped&&!x.overridden, overridden:x=>x.overridden}[t];
+  if(flag) return D.students.filter(st=>{ const x=totals(st); return x&&flag(x); });
+  // field tests: RAW=45, GRADE>=80, HW<40, T1 40..60 — RAW/GRADE or any code
+  const fm=q.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*(?:(==|>=|<=|=|>|<)\s*(-?\d+(?:\.\d+)?)|(-?\d+(?:\.\d+)?)\s*\.\.\s*(-?\d+(?:\.\d+)?))$/);
+  if(fm){
+    const name=fm[1].toLowerCase();
+    const cc=name!=='raw'&&name!=='grade'&&name!=='total'
+      ?D.cols.find(c=>(c.code||'').toLowerCase()===name):null;
+    if(name==='raw'||name==='grade'||name==='total'||cc){
+      const valOf=st=>{ if(cc) return colGrade(st,cc);
+        const x=totals(st); return x?(name==='raw'?x.raw:x.grade):null; };
+      return D.students.filter(st=>{ const v=valOf(st); if(v==null) return false;
+        if(fm[4]!==undefined) return v>=+fm[4]&&v<=+fm[5];
+        const n=+fm[3],op=fm[2]; return op==='>'?v>n:op==='>='?v>=n:op==='<'?v<n:op==='<='?v<=n:v===n; });
+    }
+  }
   return D.students.filter(st=>nameOf(st).toLowerCase().includes(t)||(st.snum||'').includes(t)||(st.section||'').toLowerCase()===t);
 }
 function buckets(){ if(BUCKET==='LETTER'){ return [[0,50,'F'],[50,55,'D'],[55,60,'C-'],[60,64,'C'],[64,68,'C+'],[68,72,'B-'],[72,76,'B'],[76,80,'B+'],[80,85,'A-'],[85,90,'A'],[90,101,'A+']].map(b=>({lo:b[0],hi:b[1],lbl:b[2]})); }
