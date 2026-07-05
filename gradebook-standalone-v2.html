@@ -202,6 +202,7 @@ function sanitize(d){
   if(!d||typeof d!=='object') return null;
   d.subject=d.subject||''; d.number=d.number||''; d.section=d.section||''; d.term=d.term||'';
   d.rawFormula=d.rawFormula||''; d.gradeFormula=d.gradeFormula||''; d.schemeNotes=d.schemeNotes||'';
+  d.capRules=(Array.isArray(d.capRules)?d.capRules:[]).filter(r=>r&&typeof r==='object').map(r=>({cond:String(r.cond||''),to:isFinite(+r.to)?+r.to:null}));
   if(d.code&&!d.subject){ const m=/^(.*\S)\s+(\S+)$/.exec(d.code); d.subject=m?m[1]:d.code; d.number=m?m[2]:''; }
   delete d.code;
   d.cols=(Array.isArray(d.cols)?d.cols:[]).filter(c=>c&&c.id&&c.title!=null).map(c=>({
@@ -436,10 +437,19 @@ function totals(st){
     } else if(isExpr(stg)||codeRefs(stg)) g=evalExpr(g,stg,codeLookup(st),codeWeight);
   }
   if(!rounded) g=Math.round(g);
-  // the course-total override (the discretionary caps): final word, with reason
+  // GRADE CAP RULES: policy hurdles as their own thing — when a rule's
+  // condition holds, the grade is capped at the rule's value (min, so a
+  // student already below the cap keeps their computed grade)
+  const capsHit=[];
+  for(const r of (D.capRules||[])){
+    if(!r.cond||!isFinite(+r.to)) continue;
+    const hit=evalExpr(0,`if(${r.cond},1,0)`,codeLookup(st),codeWeight)===1;
+    if(hit){ capsHit.push(r); g=Math.min(g,Math.round(+r.to)); }
+  }
+  // the course-total override (the discretionary word): final say, with reason
   const tov=st.ov&&st.ov.__total__;
   const grade=tov?Math.round(+tov.value):g;
-  return {raw,grade,boosted:boosted&&!tov,overridden:!!tov,computed:g}; }
+  return {raw,grade,boosted:boosted&&!tov&&!capsHit.length,overridden:!!tov,computed:g,capsHit}; }
 // split on commas/semicolons at parenthesis depth 0 — the commas inside
 // BUMP(89->90,79->80) and if(HW<40,45) are payload, not separators
 function splitStages(src){
@@ -549,6 +559,16 @@ function render(){
       ${statCells(statsOf(D.students.map(st=>{ const t=totals(st); return t?t.grade:null; })))}
       <td class="xcol"></td></tr>
     <tr class="totalrow"><td class="gripcol"></td><td class="ctl"></td><td></td><td>TOTAL</td><td>${sumOk?'':'<span class="err">should be 100</span>'}</td><td class="pctcol${sumOk?'':' err'}">${Math.round(wsum*10)/10}%</td><td class="statcol"></td><td class="statcol"></td><td class="statcol"></td><td class="statcol"></td><td class="xcol"></td></tr></table>
+    <h3 style="font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:14px 0 4px">Grade cap rules <button id="capadd" class="plus" title="add a cap rule">+</button></h3>
+    <table class="scheme">
+      <tr><th style="width:8%">If</th><th>Condition</th><th style="width:22%">then grade is at most</th><th class="xcol"></th></tr>
+      ${(D.capRules||[]).map((r,ri)=>`<tr>
+        <td class="note">if</td>
+        <td><input class="${fmClass('if('+(r.cond||'this')+',1,0)')}" data-capcond="${ri}" value="${esc(r.cond||'')}" placeholder="e.g. WAVG(T1,T2,T3,FIN)<50 or HW<40" title="${esc(fmTitle('if('+(r.cond||'this')+',1,0)','a condition over codes — students it matches show an orange Raw and are capped'))}"></td>
+        <td><input data-capto="${ri}" value="${r.to??''}" inputmode="decimal" style="width:70px"> <span class="note">(min — nobody is raised)</span></td>
+        <td class="xcol"><button class="x" data-capdel="${ri}" title="remove this cap rule">×</button></td></tr>`).join('')
+      ||'<tr><td colspan="4" class="note" style="border-color:#e6e6e6">none — the policy hurdles (e.g. exams below 50% cap the course at 50) live here</td></tr>'}
+    </table>
     <p><input data-schemenotes value="${esc(D.schemeNotes||'')}" placeholder="scheme notes (pass criteria, hurdles, policies — travels with the scheme file)" style="width:100%;border:1px solid var(--shade);padding:4px 8px;color:var(--muted)"></p></div>
     <div class="ovside">${ovTable}</div></div>`;
   const selRow=sub('In chart',(c,i)=>`<span class="gbck${SERIES.has(c.id)?' on':''}" data-ck="${c.id}"><span class="dot" style="background:${color(i)}"></span></span>`,
@@ -601,7 +621,7 @@ function render(){
           return `<td class="computed gcell${ovIn?' ovin':''}${i===0?' gsep':''}${g!=null&&g<50?' fail':''}" data-ovcol="${d.c.id}" data-ovsi="${si}" title="${esc(d.c.title)} — folded from its indented components${ovIn?'; CONTAINS AN OVERRIDDEN GRADE':''}; click to override/exempt">${g??'—'}</td>`;
         }
         return `<td class="gcell${i===0?' gsep':''}${g!=null&&g<50?' fail':''}" data-ovcol="${d.c.id}" data-ovsi="${si}" title="click to edit the mark or override it">${st.marks[d.c.id]??'—'}</td>`; }).join('')
-      +`<td class="gsep note">${tt?tt.raw:''}</td>
+      +`<td class="gsep note${tt&&tt.capsHit&&tt.capsHit.length?' ovin':''}"${tt&&tt.capsHit&&tt.capsHit.length?` title="subject to a cap rule: ${esc(tt.capsHit.map(r=>`${r.cond} → at most ${r.to}`).join(' · '))}"`:''}>${tt?tt.raw:''}</td>
       <td class="gcell${tt&&tt.overridden?' ovset':''}"${tt&&!tt.overridden?cls:''} data-ovcol="__total__" data-ovsi="${si}" title="${tt&&tt.overridden?esc((st.ov.__total__.reason||''))+' — click to edit':'click to set this student\u2019s course grade (the discretionary cap/fail — reason required)'}">${tt?(tt.overridden?`${tt.grade} <span class="gbwas">(was ${tt.computed})</span>`:tt.grade):''}</td>
       <td${cls}>${tt?letterOf(tt.grade):''}</td><td>${dnw?'<span class="dnw">DNW</span>':''}</td></tr>`;
   }).join('');
@@ -674,7 +694,8 @@ function refresh(){
    scheme; unmatched components are created; extra columns are left alone. */
 function schemeOf(){
   return {schemeVersion:1, cols:D.cols.map(c=>({id:c.id,title:c.title,code:c.code||'',formula:c.formula||'',weight:c.weight??null,parent:c.parent||null})),
-          rawFormula:D.rawFormula||'', gradeFormula:D.gradeFormula||'', notes:D.schemeNotes||''};
+          rawFormula:D.rawFormula||'', gradeFormula:D.gradeFormula||'', notes:D.schemeNotes||'',
+          capRules:(D.capRules||[]).map(r=>({cond:r.cond||'',to:r.to??null}))};
 }
 function applyScheme(sch){
   if(!sch||!Array.isArray(sch.cols)) throw new Error('not a scheme file');
@@ -692,6 +713,7 @@ function applyScheme(sch){
   D.cols=[...ordered, ...D.cols.filter(x=>!ordered.includes(x))];
   D.rawFormula=sch.rawFormula||''; D.gradeFormula=sch.gradeFormula||'';
   if(sch.notes!=null) D.schemeNotes=sch.notes;
+  if(Array.isArray(sch.capRules)) D.capRules=sch.capRules.map(r=>({cond:r.cond||'',to:r.to??null}));
 }
 
 /* the *** gesture CONCRETIZES: auto-name the column from its title (unique
@@ -874,6 +896,8 @@ document.addEventListener('change',e=>{
   if(d.rawform!==undefined){ D.rawFormula=t.value.trim(); save(); render(); return; }
   if(d.gradeform!==undefined){ D.gradeFormula=t.value.trim(); save(); render(); return; }
   if(d.schemenotes!==undefined){ D.schemeNotes=t.value.trim(); save(); return; }
+  if(d.capcond!==undefined){ (D.capRules=D.capRules||[])[+d.capcond].cond=t.value.trim(); save(); render(); return; }
+  if(d.capto!==undefined){ (D.capRules=D.capRules||[])[+d.capto].to=parseFloat(t.value); save(); render(); return; }
   if(t.id==='fsubj'){ D.subject=t.value.trim(); save(); refresh(); return; }
   if(t.id==='fnum'){ D.number=t.value.trim(); save(); refresh(); return; }
   if(t.id==='fsec'){ D.section=t.value.trim(); save(); return; }
@@ -1025,6 +1049,9 @@ document.addEventListener('click',e=>{
       if(typeof va==='string'||typeof vb==='string') return String(va??'').localeCompare(String(vb??''))*(SORT.asc?1:-1);
       va=va==null?-Infinity:va; vb=vb==null?-Infinity:vb; return (va-vb)*(SORT.asc?1:-1); });
     save(); render(); return; }
+  if(e.target.id==='capadd'){ (D.capRules=D.capRules||[]).push({cond:'',to:50}); save(); render(); return; }
+  const cd=e.target.closest('[data-capdel]');
+  if(cd){ D.capRules.splice(+cd.dataset.capdel,1); save(); render(); return; }
   if(e.target.id==='addcol'){
     const c={id:uid(),title:'New component',code:'',formula:'',weight:null,parent:null};
     fillCodes([...D.cols,c]);
