@@ -142,7 +142,7 @@
 <h1>GRADEBOOK v2 <span class="note">— standalone. Everything stays on this machine; browser storage self-clears 2 hours after your last change (Download data to keep work longer); nothing leaves it except your exports.</span></h1>
 
 <div class="setup bar">
-  <label>Academic Period <input id="fterm" placeholder="2025-26 Winter Term 2 (UBC-V)" style="width:230px" title="a term like 2025W2 becomes the full Workday period; a full period string passes through as-is"></label>
+  <label>Academic Period <input id="fterm" placeholder="2025-26 Winter Term 2 (UBC-V)" style="width:230px" title="copied into the Workday export exactly as typed"></label>
   <label>Course Subject Code <input id="fsubj" placeholder="CPSC" style="width:70px"></label>
   <label>Course Number <input id="fnum" placeholder="210" style="width:60px"></label>
   <label>Section Number <input id="fsec" placeholder="101" style="width:60px" title="used for students whose row has no section"></label>
@@ -1009,18 +1009,12 @@ function xlsxOf(rows){                        // rows: arrays of strings/numbers
 }
 
 /* ════ Workday export (the SIS grammar) ════ */
-function workdayPeriod(label){
-  const m=/(\d{4})\s*([wsa])\s*(\d+)?/i.exec(label||''); if(!m) return label||'';
-  const y=+m[1],sess=m[2].toLowerCase(),t=m[3]||'1';
-  if(sess==='w') return `${y}-${String((y+1)%100).padStart(2,'0')} Winter Term ${t} (UBC-V)`;
-  if(sess==='s') return `${y} Summer Term ${t} (UBC-V)`;
-  return `${y} Term ${t} (UBC-V)`;
-}
+
 function exportWD(){
   const subj=D.subject||'', num=D.number||'';
   const rows=[['Student Id','Student Preferred Name','Student Last Name','Grade','Grade Note','Academic Period','Course Subject Code','Course Number','Section Number','Status','Updated By']];
   for(const st of D.students){ const t=totals(st);
-    rows.push([st.snum||'',st.first||'',st.last||'',t?t.grade:'',dnwOf(st)?'DNW':'',workdayPeriod(D.term),subj,num,st.section||D.section||'','','']); }
+    rows.push([st.snum||'',st.first||'',st.last||'',t?t.grade:'',dnwOf(st)?'DNW':'',(D.term||'').trim(),subj,num,st.section||D.section||'','','']); }
   // Workday's upload tool accepts ONLY Excel files — so it gets a real one
   // (grades as numbers; student ids as text, protecting leading zeros)
   const a=document.createElement('a');
