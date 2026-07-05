@@ -79,7 +79,7 @@
   table.scheme th, table.scheme td { border:1px solid var(--line); text-align:left; }
   table.scheme th.pctcol, table.scheme td.pctcol { width:80px; text-align:center; white-space:nowrap; }
   table.scheme th.codecol { width:120px; }
-  table.scheme th.formcol { width:30%; }
+  table.scheme th.formcol { width:38%; }
   table.scheme td.xcol, table.scheme th.xcol { border:none; width:30px; text-align:center; }
   /* the indent/outdent column: a narrow, bordered, first-class table column
      snug against the component names — only the TEXT indents */
@@ -101,6 +101,15 @@
      grid's computed columns */
   table.scheme tr.parentrow td { background:#eaf3fa; }
   input.badformula { background:#fde7e4 !important; }
+  /* per-cell overrides (LMS1): set = pale orange, exempt/moveto = grey */
+  td.ovset { background:#ffe6c4; cursor:pointer; }
+  td.ovex { background:#e4e7ea; color:var(--muted); cursor:pointer; }
+  .gbwas { font-size:10px; color:var(--muted); }
+  #ovpop { position:fixed; inset:0; background:rgba(0,0,0,.25); z-index:9; }
+  .ovcard { background:#fff; border:2px solid var(--line); max-width:420px; margin:16vh auto; padding:14px; }
+  .ovcard label { display:block; margin:6px 0; }
+  .ovcard input[type=text] { font:inherit; border:1px solid var(--line); padding:3px 6px; width:100%; box-sizing:border-box; }
+  .ovcard select { max-width:100%; }
   /* live sample columns: see the formulas WORK as you type them */
   table.scheme td.statcol, table.scheme th.statcol { width:54px; text-align:center; color:var(--muted); }
   table.scheme tr.dragover { outline:2px dashed var(--line); outline-offset:-2px; }
@@ -133,6 +142,7 @@ Type <code>***</code> as a column's short code or formula to make it THE course 
 Grade formula (optional — nothing is applied unless you type it): <code>ROUND()+BOOST</code> (boost lifts a grade sitting within N of a UBC boundary), <code>ROUNDUP</code>/<code>ROUNDDOWN</code>, <code>SCALE(n)</code>, <code>+BOOST(2)</code>. The Grade column always reports whole numbers.<br>
 Parent folds: <code>DROP(LOWEST[,n])</code>/<code>DROP(HIGHEST[,n])</code> · <code>KEEP(HW5)</code> protects members from the drop · <code>SUM</code>/<code>MAX</code>/<code>MIN</code>.
 Grade formula extras: <code>BUMP(89-&gt;90,79-&gt;80)</code> boosts those exact values only; <code>or(TB,0)</code> takes the first value that exists (so blank TB falls back to 0; <code>orzero(TB)</code> is shorthand) — e.g. raw formula <code>+or(TB,0)</code>.<br>
+Right-click any mark (or a fold) for per-student overrides: <b>Exempt</b> (weight renormalizes), <b>Override value</b>, or <b>Move weight to</b> another component — each with a reason. Overridden cells tint and show <i>(was N)</i>; click one to edit.<br>
 A <b>Final Exam</b> column scoring exactly 0 flags <b>DNW</b>.</p>
 
 <h2 style="display:flex;align-items:center">Overall grade calculation<span style="flex:1"></span><button id="schdl" style="font-weight:400;text-transform:none;letter-spacing:0" title="save the SCHEME (structure, codes, formulas, weights — no students, no marks) as a file">Download scheme</button><button id="schload" style="font-weight:400;text-transform:none;letter-spacing:0;margin-left:8px" title="load a scheme file: components match your existing columns by title/code; marks are kept">Load scheme</button></h2>
@@ -189,9 +199,13 @@ function sanitize(d){
     const seen=new Set([c.id]); let x=c;
     while(x&&x.parent){ if(seen.has(x.parent)){ c.parent=null; break; }
       seen.add(x.parent); x=d.cols.find(y=>y.id===x.parent); } });
-  d.students=(Array.isArray(d.students)?d.students:[]).filter(st=>st&&typeof st==='object').map(st=>({
-    snum:st.snum||'', first:st.first||'', last:st.last||'', section:st.section||'',
-    marks:Object.fromEntries(Object.entries(st.marks||{}).filter(([k,v])=>ids.has(k)&&v!=null&&v!==''))}));
+  d.students=(Array.isArray(d.students)?d.students:[]).filter(st=>st&&typeof st==='object').map(st=>{
+    const out={snum:st.snum||'', first:st.first||'', last:st.last||'', section:st.section||'',
+      marks:Object.fromEntries(Object.entries(st.marks||{}).filter(([k,v])=>ids.has(k)&&v!=null&&v!==''))};
+    const ov=Object.fromEntries(Object.entries(st.ov||{}).filter(([k,o])=>ids.has(k)&&o&&(
+      (o.type==='exempt')||(o.type==='set'&&isFinite(+o.value))||(o.type==='moveto'&&ids.has(o.to)))));
+    if(Object.keys(ov).length) out.ov=ov;
+    return out; });
   return d;
 }
 // while the page sits open, the STORED copy still expires (in-memory work is
@@ -317,7 +331,14 @@ function codeLookup(st,seen){ return name=>{
   const cc=D.cols.find(x=>(x.code||'').toLowerCase()===name.toLowerCase());
   if(!cc||(seen&&seen.has(cc.id))) return null;
   return colGrade(st,cc,new Set([...(seen||[])])); }; }
-function colGrade(st,c,seen){
+function colGrade(st,c,seen,skipOv){
+  const ov=!skipOv&&st.ov&&st.ov[c.id];
+  if(ov){
+    if(ov.type==='exempt') return null;                    // absent: weight renormalizes
+    if(ov.type==='set') return Math.round(+ov.value*10)/10;
+    if(ov.type==='moveto'){ const t=D.cols.find(x=>x.id===ov.to);
+      return (t&&!(seen&&seen.has(t.id)))?colGrade(st,t,new Set([...(seen||[]),c.id])):null; }
+  }
   const kids=kidsOf(c.id);
   if(kids.length){                        // a PARENT: fold the indented children
     const xs=kids.map(k=>({g:colGrade(st,k,new Set([...(seen||[]),c.id])),
@@ -479,8 +500,17 @@ function render(){
       <td><button class="x" data-delstu="${si}" title="remove student">×</button></td>`;
     return `<tr data-row="${si}">${roster}`
       +DISP.map((d,i)=>{ const g=colGrade(st,d.c);
-        if(d.computed) return `<td class="computed${i===0?' gsep':''}${g!=null&&g<50?' fail':''}" title="${esc(d.c.title)} — folded from its indented components">${g??'—'}</td>`;
-        return `<td${i===0?' class="gsep':' class="'}${g!=null&&g<50?' fail':''}"><input class="mark" data-mark="${d.c.id}" data-si="${si}" value="${st.marks[d.c.id]??''}"></td>`; }).join('')
+        const ov=st.ov&&st.ov[d.c.id];
+        if(ov){
+          const orig=colGrade(st,d.c,null,true);
+          const tgt=ov.type==='moveto'?(D.cols.find(x=>x.id===ov.to)||{}):null;
+          const txt=ov.type==='exempt'?`— <span class="gbwas">(was ${orig??'—'})</span>`
+            :ov.type==='set'?`${g??'—'} <span class="gbwas">(was ${orig??'—'})</span>`
+            :`${g??'—'} <span class="gbwas">→ ${esc(tgt.code||tgt.title||'?')}</span>`;
+          return `<td class="${ov.type==='set'?'ovset':'ovex'}${i===0?' gsep':''}" data-ovcol="${d.c.id}" data-ovsi="${si}" title="${esc(ov.reason||ov.type)} — click to edit the override">${txt}</td>`;
+        }
+        if(d.computed) return `<td class="computed${i===0?' gsep':''}${g!=null&&g<50?' fail':''}" data-ovcol="${d.c.id}" data-ovsi="${si}" title="${esc(d.c.title)} — folded from its indented components. Right-click to override/exempt.">${g??'—'}</td>`;
+        return `<td${i===0?' class="gsep"':''} data-ovcol="${d.c.id}" data-ovsi="${si}"${g!=null&&g<50?' class="fail"':''}><input class="mark" data-mark="${d.c.id}" data-si="${si}" value="${st.marks[d.c.id]??''}"></td>`; }).join('')
       +`<td class="gsep note">${tt?tt.raw:''}</td><td${cls}>${tt?tt.grade:''}</td><td${cls}>${tt?letterOf(tt.grade):''}</td><td>${dnw?'<span class="dnw">DNW</span>':''}</td></tr>`;
   }).join('');
   document.getElementById('grid').innerHTML=D.cols.length||D.students.length
@@ -745,6 +775,53 @@ document.addEventListener('change',e=>{
 
 });
 document.getElementById('filter').addEventListener('input',e=>{ FILTER=e.target.value; refresh(); });
+// ── per-cell override popover (LMS1): Unchanged / Exempt / Set / Move weight
+//    to — with a reason. Right-click any mark or fold; click an overridden
+//    cell to edit. The course RAW/GRADE columns are not overridable (move the
+//    total by adjusting its components). ──
+function openOverride(colId,si){
+  document.getElementById('ovpop')?.remove();
+  const c=D.cols.find(x=>x.id===colId), st=D.students[si]; if(!c||!st) return;
+  const ov=(st.ov&&st.ov[colId])||{};
+  const others=D.cols.filter(x=>x.id!==colId);
+  const wrap=document.createElement('div'); wrap.id='ovpop';
+  wrap.innerHTML=`<div class="ovcard">
+    <div style="display:flex;justify-content:space-between"><b>${esc(c.title)} · ${esc(nameOf(st)||st.snum)}</b><a href="#" class="link" id="ovx">cancel</a></div>
+    <label><input type="radio" name="ovact" value="none"${!ov.type?' checked':''}> Unchanged</label>
+    <label><input type="radio" name="ovact" value="exempt"${ov.type==='exempt'?' checked':''}> Exempt — weight moves to the remaining components</label>
+    <label><input type="radio" name="ovact" value="set"${ov.type==='set'?' checked':''}> Override value <input type="text" id="ovval" value="${ov.type==='set'?ov.value:''}" placeholder="%" style="width:70px"></label>
+    <label><input type="radio" name="ovact" value="moveto"${ov.type==='moveto'?' checked':''}> Move weight to <select id="ovto">${others.map(o=>`<option value="${o.id}"${ov.to===o.id?' selected':''}>${esc(o.code?o.code+' — ':'')}${esc(o.title)}</option>`).join('')}</select></label>
+    <label>Reason <input type="text" id="ovreason" value="${esc(ov.reason||'')}" placeholder="shown in exports and tooltips"></label>
+    <p><button id="ovapply">Apply</button></p></div>`;
+  const close=()=>wrap.remove();
+  wrap.addEventListener('click',ev=>{ if(ev.target===wrap||ev.target.id==='ovx'){ ev.preventDefault(); close(); } });
+  wrap.querySelector('#ovval').addEventListener('focus',()=>{ wrap.querySelector('input[value="set"]').checked=true; });
+  wrap.querySelector('#ovto').addEventListener('focus',()=>{ wrap.querySelector('input[value="moveto"]').checked=true; });
+  wrap.querySelector('#ovapply').addEventListener('click',()=>{
+    const act=wrap.querySelector('input[name="ovact"]:checked').value;
+    const reason=wrap.querySelector('#ovreason').value.trim();
+    st.ov=st.ov||{};
+    if(act==='none') delete st.ov[colId];
+    else if(act==='exempt') st.ov[colId]={type:'exempt',reason};
+    else if(act==='set'){ const v=parseFloat(wrap.querySelector('#ovval').value);
+      if(!isFinite(v)){ wrap.querySelector('#ovval').focus(); return; }
+      st.ov[colId]={type:'set',value:v,reason}; }
+    else if(act==='moveto'){ const to=wrap.querySelector('#ovto').value;
+      if(!to||to===colId) return;
+      st.ov[colId]={type:'moveto',to,reason}; }
+    if(!Object.keys(st.ov).length) delete st.ov;
+    close(); save(); render();
+  });
+  document.body.appendChild(wrap);
+}
+document.addEventListener('contextmenu',e=>{
+  const td=e.target.closest?.('td[data-ovcol]'); if(!td) return;
+  e.preventDefault(); openOverride(td.dataset.ovcol,+td.dataset.ovsi);
+});
+document.addEventListener('click',e=>{
+  const td=e.target.closest?.('td.ovset[data-ovcol],td.ovex[data-ovcol]'); if(!td) return;
+  openOverride(td.dataset.ovcol,+td.dataset.ovsi);
+});
 // drag the ≡ grip onto another calculation row to reorder (a parent moves
 // with its children; a row dropped on a child joins that child's parent)
 let DRAG=null;
