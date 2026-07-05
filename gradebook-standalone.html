@@ -148,7 +148,7 @@
 </style>
 </head>
 <body>
-<h1>GRADEBOOK v2 <span class="note">— standalone. Everything stays on this machine; browser storage self-clears 2 hours after your last change (Download data to keep work longer); nothing leaves it except your exports.</span></h1>
+<h1>Grade Double Checker <span class="note">— double-check grades here. Everything stays on this machine; browser storage self-clears 2 hours after your last change (Download data to keep work longer); nothing leaves it except your exports.</span></h1>
 
 <div class="setup bar">
   <label>Academic Period <input id="fterm" placeholder="2025-26 Winter Term 2 (UBC-V)" style="width:230px" title="copied into the Workday export exactly as typed"></label>
@@ -982,14 +982,16 @@ function importCSV(text){
   if(si<0) si=idxOf(nameI>=0?/^id$/:/^(student|id)$/);   // 'Student' is only an id when it isn't the name
   const seci=head.findIndex(h=>/^sec/i.test(h));
   const labi=head.findIndex(h=>/^lab$/i.test(h.trim()));
-  if(si<0){ alert('No student-number column found (Student #, snum, SIS User ID, or id).'); return; }
+  if(si<0) si=0;    // no labelled id column — the FIRST column IS the student number, whatever it's called
   const skip=new Set([fi,li,si,seci,labi,nameI].filter(x=>x>=0));
   // identity/bookkeeping columns are not assessments (GitHub, Canvas SIS ids…)
   head.forEach((h,i)=>{ if(/^(githubid|internalid|email|username|user|id|sisloginid|sisuserid|rootaccount|integrationid|enrollmentstate)$/.test(norm(h))) skip.add(i); });
   const gradeCols=head.map((h,i)=>({h,i})).filter(x=>!skip.has(x.i)&&x.h);
+  let newCols=0;
   for(const gc of gradeCols){
-    if(!D.cols.some(c=>norm(c.title)===norm(gc.h)))
-      D.cols.push({id:uid(),title:gc.h,code:'',formula:'',weight:null,parent:null});
+    if(!D.cols.some(c=>norm(c.title)===norm(gc.h))){
+      D.cols.push({id:uid(),title:gc.h,code:'',formula:'',weight:null,parent:null}); newCols++;
+    }
   }
   fillCodes(D.cols);
   let added=0,updated=0;
@@ -1014,7 +1016,7 @@ function importCSV(text){
     }
   }
   save(); SERIES=null; render();
-  alert(`${added} students added, ${updated} updated, ${gradeCols.length} assessment columns.`);
+  alert(`${added} students added, ${updated} updated, ${gradeCols.length} assessment columns${newCols?` (${newCols} new, added to the rubric)`:''}.`);
 }
 
 /* ════ a minimal .xlsx writer — an xlsx is a ZIP of XML; Workday's upload
