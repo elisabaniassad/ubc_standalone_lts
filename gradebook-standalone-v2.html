@@ -124,6 +124,8 @@
   td.bst  { background:#bfe3b8; }      /* grade lifted by BOOST: the darker green */
   td.ovex { background:#e4e7ea; color:var(--muted); cursor:pointer; }
   .gbwas { font-size:10px; color:var(--muted); }
+  .bfill { position:relative; }
+  .bfill .bsel { position:absolute; left:0; right:0; bottom:0; background:#e0a800; }  /* the filtered students, gold, inside their cohort bar */
   #ovpop { position:fixed; inset:0; background:rgba(0,0,0,.25); z-index:9; }
   .ovcard { background:#fff; border:2px solid var(--line); max-width:420px; margin:16vh auto; padding:14px; }
   .ovcard label { display:block; margin:6px 0; }
@@ -730,11 +732,21 @@ function refresh(){
   const PAL=['#6fa8dc','#bda1cb','#93c47d','#e0a800','#76a5af','#c27ba0','#8e7cc3','#dd7e6b','#6aa84f','#a4c2f4','#f6b26b','#999999'];
   const series=[...D.cols.map((c,i)=>({id:c.id,label:c.title,color:PAL[i%PAL.length]})),{id:'__total__',label:'Grade',color:'#444'}].filter(x=>SERIES.has(x.id));
   /* (chart series ids unchanged — parents chart their folded value) */
-  const data=series.map(sr=>({sr,counts:bks.map(b=>vis.map(st=>colVal(sr.id,st)).filter(v=>v!=null&&v>=b.lo&&v<b.hi).length)}));
+  // with a filter on, the chart keeps the WHOLE cohort as context and picks
+  // out the matching students' share of each bar in gold
+  const isFilt=FILTER.trim()&&vis.length!==D.students.length;
+  const cnt=(list,id,b)=>list.map(st=>colVal(id,st)).filter(v=>v!=null&&v>=b.lo&&v<b.hi).length;
+  const data=series.map(sr=>({sr,
+    counts:bks.map(b=>cnt(isFilt?D.students:vis,sr.id,b)),
+    sel:isFilt?bks.map(b=>cnt(vis,sr.id,b)):null}));
   const mx=Math.max(1,...data.flatMap(d=>d.counts));
-  document.getElementById('chart').innerHTML=(!vis.length||!data.length)
+  document.getElementById('chart').innerHTML=(!D.students.length||!data.length)
     ?'<p class="note">No grades in view yet.</p>'
-    :bks.map((b,i)=>`<div class="bkt"><div class="bars">${data.map(d=>`<span class="bcol" title="${esc(d.sr.label)}: ${d.counts[i]}"><span class="bn">${d.counts[i]||''}</span><span class="bfill" style="height:${Math.round(d.counts[i]/mx*76)+1}px;background:${d.sr.color}"></span></span>`).join('')}</div><span class="bktlbl">${esc(b.lbl)}</span></div>`).join('');
+    :bks.map((b,i)=>`<div class="bkt"><div class="bars">${data.map(d=>{
+      const n=d.counts[i], m=d.sel?d.sel[i]:0;
+      const hpx=Math.round(n/mx*76)+1, gpx=m?Math.min(hpx,Math.round(m/mx*76)+1):0;
+      return `<span class="bcol" title="${esc(d.sr.label)}: ${n}${m?` (${m} match the filter)`:''}"><span class="bn">${n||''}</span><span class="bfill" style="height:${hpx}px;background:${d.sr.color}">${gpx?`<span class="bsel" style="height:${gpx}px"></span>`:''}</span></span>`;
+    }).join('')}</div><span class="bktlbl">${esc(b.lbl)}</span></div>`).join('');
 }
 
 /* SCHEME files: the structure without the people. Loading matches components
